@@ -168,7 +168,7 @@ function App() {
         </nav>
       </header>
 
-      <main>{page === 'admin' ? <AdminSoon /> : page === 'account' ? (
+      <main>{page === 'admin' ? <AdminPanel /> : page === 'account' ? (
         player ? <PlayerPanel player={player} onRefresh={refreshNow} /> : <section className="account-gate section-wrap"><span className="login-mark"><Shield size={24} /></span><h1>Área <span>restrita.</span></h1><p>Entre com sua conta do servidor para acessar seu perfil, inventário e progresso.</p><button className="button button-primary" onClick={() => setLoginOpen(true)}>Entrar na conta <LogIn size={17} /></button></section>
       ) : <>
         <section className="hero" id="inicio">
@@ -336,8 +336,126 @@ function InventorySlot({ item }) {
   </div>
 }
 
-function AdminSoon() {
-  return <section className="account-gate section-wrap"><span className="login-mark"><LockKeyhole size={24} /></span><h1>Painel <span>em preparação.</span></h1><p>O painel administrativo depende da próxima etapa da API (vendas, VIPs e moderação) e será ligado depois.</p></section>
+function AdminPanel() {
+  const [checking, setChecking] = useState(true)
+  const [configured, setConfigured] = useState(false)
+  const [admin, setAdmin] = useState(null)
+  const [step, setStep] = useState('credentials')
+  const [setupRequired, setSetupRequired] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [form, setForm] = useState({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
+
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      fetch(api('/v1/site/admin/status')).then(response => response.ok ? response.json() : Promise.reject()),
+      fetch(api('/v1/site/admin/me'), { credentials: 'include' }).then(response => response.ok ? response.json() : null).catch(() => null),
+    ]).then(([status, session]) => {
+      if (!active) return
+      setConfigured(status.configured)
+      setAdmin(session)
+    }).catch(() => {
+      if (active) setError('Não foi possível conectar à API.')
+    }).finally(() => { if (active) setChecking(false) })
+    return () => { active = false }
+  }, [])
+
+  function update(event) {
+    setForm(current => ({ ...current, [event.target.name]: event.target.value }))
+  }
+
+  async function requestToken(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/token'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nick: form.nick, password: form.serverPassword }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      setSetupRequired(data.setupRequired)
+      setStep('verification')
+      setNotice('Código gerado. Confira o log da API.')
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível gerar o código.')
+    } finally { setBusy(false) }
+  }
+
+  async function authenticate(event) {
+    event.preventDefault()
+    setError('')
+    setNotice('')
+    if (setupRequired && form.adminPassword.length < 12) return setError('A senha administrativa precisa ter pelo menos 12 caracteres.')
+    if (setupRequired && form.adminPassword === form.serverPassword) return setError('A senha administrativa deve ser diferente da senha do servidor.')
+    if (setupRequired && form.adminPassword !== form.confirmation) return setError('As senhas administrativas não coincidem.')
+
+    setBusy(true)
+    try {
+      const path = setupRequired ? '/v1/site/admin/setup' : '/v1/site/admin/login'
+      const response = await fetch(api(path), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nick: form.nick, password: form.serverPassword, token: form.token, adminPassword: form.adminPassword }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      setConfigured(true)
+      setAdmin({ nick: data.nick })
+      setForm({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
+    } catch (authError) {
+      setError(authError.message || 'Não foi possível autenticar.')
+    } finally { setBusy(false) }
+  }
+
+  async function logout() {
+    await fetch(api('/v1/site/admin/logout'), { method: 'POST', credentials: 'include' }).catch(() => {})
+    setAdmin(null)
+    setStep('credentials')
+    setForm({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
+  }
+
+  if (checking) return <section className="account-gate section-wrap"><span className="login-mark"><LockKeyhole size={24} /></span><p>Verificando acesso administrativo…</p></section>
+
+  if (admin) return <section className="admin-session section-wrap">
+    <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
+    <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>Sessão administrativa ativa</small></div><span className="admin-session-status">Autenticado</span></div>
+  </section>
+
+  return <section className="admin-gate section-wrap">
+    <div className="login-card admin-access">
+      <span className="login-mark"><LockKeyhole size={24} /></span>
+      <p className="section-kicker">{configured ? 'ACESSO RESTRITO' : 'CONFIGURAÇÃO INICIAL DO PROPRIETÁRIO'}</p>
+      <h2>{step === 'verification' ? (setupRequired ? 'Configurar acesso.' : 'Verificar acesso.') : <>Painel <span>administrativo.</span></>}</h2>
+      {step === 'credentials' ? <form onSubmit={requestToken}>
+        <label>Nick do servidor<input name="nick" value={form.nick} onChange={update} required autoComplete="username" /></label>
+        <label>Senha do servidor<input name="serverPassword" type="password" value={form.serverPassword} onChange={update} required autoComplete="current-password" /></label>
+        <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Validando…' : 'Gerar código de acesso'} <ChevronRight size={17} /></button>
+      </form> : <form onSubmit={authenticate}>
+        <label>Código de verificação<input name="token" value={form.token} onChange={update} required inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" /></label>
+        <label>Senha administrativa<input name="adminPassword" type="password" value={form.adminPassword} onChange={update} required minLength={setupRequired ? 12 : 1} autoComplete={setupRequired ? 'new-password' : 'current-password'} /></label>
+        {setupRequired && <label>Confirme a senha administrativa<input name="confirmation" type="password" value={form.confirmation} onChange={update} required minLength={12} autoComplete="new-password" /></label>}
+        <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Validando…' : setupRequired ? 'Criar acesso administrativo' : 'Entrar'} <ChevronRight size={17} /></button>
+        <button className="admin-back" type="button" onClick={() => { setStep('credentials'); setError(''); setNotice('') }}>Voltar</button>
+      </form>}
+      {notice && <p className="admin-notice" role="status">{notice}</p>}
+      {error && <p className="login-error" role="alert">{error}</p>}
+    </div>
+  </section>
+}
+
+function adminError(code) {
+  return ({
+    admin_not_configured: 'O nick administrador ainda não foi configurado na API.',
+    invalid_credentials: 'Nick ou senha inválidos.',
+    invalid_or_expired_token: 'Código inválido ou expirado. Gere outro código.',
+    admin_already_registered: 'O acesso administrativo já foi configurado.',
+    admin_not_registered: 'Configure o acesso administrativo primeiro.',
+    invalid_admin_password: 'A senha precisa ter 12 caracteres e ser diferente da senha do servidor.',
+  })[code] || 'Não foi possível completar a solicitação.'
 }
 
 export default App

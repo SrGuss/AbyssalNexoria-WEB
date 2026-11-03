@@ -75,6 +75,20 @@ function App() {
   const [page, setPage] = useState(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : 'home')
 
   useEffect(() => {
+    const favicon = document.querySelector("link[rel~='icon']");
+
+    const icon = favicon || document.createElement("link");
+
+    icon.rel = "icon";
+    icon.type = "image/png";
+    icon.href = "https://abyssalnexoria-api.squareweb.app/src/logo_server/logo.png";
+
+    if (!favicon) {
+      document.head.appendChild(icon);
+    }
+  }, []);
+
+  useEffect(() => {
     loadMe().then(setPlayer)
   }, [])
 

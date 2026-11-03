@@ -304,6 +304,9 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .store-payment-state > div { display: grid; gap: 5px; }
 .store-payment-state strong { color: #f0e9fa; font-size: 11px; }
 .store-payment-state small { color: #a79db7; font-size: 10px; line-height: 1.5; }
+.store-payment-verification-message { grid-column: 1 / -1; color: #c5b9da !important; }
+.store-payment-verify { grid-column: 1 / -1; width: 100%; min-height: 39px; font-size: 10px; }
+.store-payment-verify:disabled { cursor: wait; opacity: .7; }
 .store-pix-qr { grid-column: 1 / -1; width: min(100%, 190px); aspect-ratio: 1; justify-self: center; padding: 8px; border-radius: 5px; background: white; image-rendering: pixelated; }
 .store-pix-code { grid-column: 1 / -1; display: grid; gap: 6px; color: #bcb2cd; font-size: 10px; }
 .store-pix-code input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 5px; color: #e8e1f3; background: #0c0a14; font: 10px/1.5 'DM Sans', sans-serif; }

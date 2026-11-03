@@ -3,7 +3,7 @@ import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
-  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save
+  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save, RefreshCw
 } from 'lucide-react'
 
 const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
@@ -275,6 +275,9 @@ function StorePage({ player, onLogin }) {
   const [error, setError] = useState('')
   const [payerCpf, setPayerCpf] = useState('')
   const payerCpfRef = useRef('')
+  const [verificationBusy, setVerificationBusy] = useState(false)
+  const [verificationMessage, setVerificationMessage] = useState('')
+  const verificationBusyRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -289,33 +292,49 @@ function StorePage({ player, onLogin }) {
     localStorage.setItem('nexoria-store-cart', JSON.stringify(cart))
   }, [cart])
 
-  useEffect(() => {
-    if (!pendingOrderId) return
-    let active = true
-    const checkOrder = async () => {
-      const response = await fetch(api(`/v1/site/store/orders/${encodeURIComponent(pendingOrderId)}`), { credentials: 'include' }).catch(() => null)
-      if (!response?.ok) return
-      const order = await response.json().catch(() => null)
-      if (!active || !order) return
-      if (order.status === 'paid') {
-        setPaymentResult(current => ({ ...current, status: 'approved' }))
-        setCart({})
-        setPendingOrderId('')
-      } else if (order.status === 'failed') {
-        setPaymentResult(current => ({ ...current, status: 'failed' }))
-        setPendingOrderId('')
-      }
-    }
-    checkOrder()
-    const timer = window.setInterval(checkOrder, 5000)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [pendingOrderId])
-
   const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
   const cartItems = useMemo(() => catalog.products.filter(product => Number(cart[product.id]) > 0), [catalog.products, cart])
   const total = useMemo(() => cartItems.reduce((sum, product) => sum + product.priceCents * Number(cart[product.id]), 0), [cartItems, cart])
   const paymentInitialization = useMemo(() => ({ amount: total / 100 }), [total])
   const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  const refreshPaymentStatus = useCallback(async (manual = false) => {
+    if (!pendingOrderId || verificationBusyRef.current) return
+    verificationBusyRef.current = true
+    setVerificationBusy(true)
+    if (manual) setVerificationMessage('')
+    try {
+      const response = await fetch(api(`/v1/site/store/orders/${encodeURIComponent(pendingOrderId)}/verify`), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      })
+      const order = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(order.error || 'payment_status_unavailable')
+      if (order.status === 'paid') {
+        setPaymentResult(current => ({ ...current, status: 'approved' }))
+        setCart({})
+        setPendingOrderId('')
+        setVerificationMessage('')
+      } else if (order.status === 'failed') {
+        setPaymentResult(current => ({ ...current, status: 'failed' }))
+        setPendingOrderId('')
+        setVerificationMessage('')
+      } else if (manual) {
+        setVerificationMessage('Ainda não recebemos a confirmação. Se já pagou, aguarde um pouco e consulte novamente.')
+      }
+    } catch {
+      if (manual) setVerificationMessage('Não foi possível consultar agora. Tente novamente em instantes.')
+    } finally {
+      verificationBusyRef.current = false
+      setVerificationBusy(false)
+    }
+  }, [pendingOrderId])
+
+  useEffect(() => {
+    if (!pendingOrderId) return
+    refreshPaymentStatus()
+    const timer = window.setInterval(() => refreshPaymentStatus(), 15000)
+    return () => window.clearInterval(timer)
+  }, [pendingOrderId, refreshPaymentStatus])
 
   function changeQuantity(id, amount) {
     setCart(current => {
@@ -425,6 +444,8 @@ function StorePage({ player, onLogin }) {
           {paymentResult?.status === 'approved' ? <div className="store-payment-state success"><Check size={19} /><div><strong>Pagamento aprovado</strong><small>Seu pedido foi confirmado.</small></div></div> : paymentResult?.status === 'pending' || paymentResult?.status === 'in_process' ? <div className="store-payment-state"><Clock3 size={19} /><div><strong>Aguardando confirmação</strong><small>{paymentResult.pixQrCode ? 'Pague com o Pix para concluir o pedido.' : 'Estamos aguardando a confirmação do Mercado Pago.'}</small></div>
             {paymentResult.pixQrCodeBase64 && <img className="store-pix-qr" src={`data:image/png;base64,${paymentResult.pixQrCodeBase64}`} alt="QR Code Pix para pagamento" />}
             {paymentResult.pixQrCode && <label className="store-pix-code">Código Pix<input readOnly value={paymentResult.pixQrCode} onFocus={event => event.target.select()} /></label>}
+            {verificationMessage && <small className="store-payment-verification-message" role="status">{verificationMessage}</small>}
+            <button className="button button-ghost store-payment-verify" onClick={() => refreshPaymentStatus(true)} disabled={verificationBusy}><RefreshCw size={15} />{verificationBusy ? 'Consultando…' : 'Já paguei'}</button>
             {paymentResult.ticketUrl && <a className="button button-ghost" href={paymentResult.ticketUrl} target="_blank" rel="noreferrer">Abrir boleto</a>}
           </div> : paymentResult?.status === 'failed' ? <div className="store-payment-state failed"><X size={19} /><div><strong>Pagamento não concluído</strong><small>Tente iniciar outro pagamento.</small></div></div> : MP_PUBLIC_KEY ? <>
             <p className="store-payment-hint">Informe os dados solicitados pelo Mercado Pago.</p>

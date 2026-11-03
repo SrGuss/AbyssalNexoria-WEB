@@ -338,13 +338,15 @@ function StorePage({ player, onLogin }) {
           invalid_total: 'O total da compra está inválido. Revise o carrinho.',
           products_unavailable: 'Algum produto mudou. Atualize a loja e revise o carrinho.',
           invalid_payment_data: 'Confira os dados do pagador e tente novamente.',
+          pix_identification_required: 'Para pagar com Pix, informe CPF ou CNPJ nos dados solicitados pelo Mercado Pago.',
           payment_rejected: 'O pagamento não foi autorizado. Confira os dados ou escolha outro método.',
           payment_verification_failed: 'Não foi possível confirmar o valor do pagamento. Entre em contato com o suporte.',
           checkout_unavailable: 'O Mercado Pago está indisponível. Tente novamente.',
         }
         const message = messages[data.error]
           || `A API de pagamento respondeu com erro HTTP ${response.status}. Confirme se a versão atualizada da API foi publicada.`
-        throw new Error(message)
+        const detail = data.statusDetail || data.causeCodes?.join(', ')
+        throw new Error(detail ? `${message} (Mercado Pago: ${detail})` : message)
       }
       if (['rejected', 'cancelled'].includes(data.status))
         throw new Error('O pagamento não foi autorizado. Confira os dados ou escolha outro método.')

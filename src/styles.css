@@ -263,5 +263,11 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .admin-action-status.error { color: #ffaaa9; border-color: rgba(255,170,169,.3); }
 .admin-temporary-password { display: flex; align-items: center; gap: 12px; max-width: 560px; padding: 12px; border: 1px solid rgba(145,214,174,.3); border-radius: 7px; background: rgba(22,18,39,.8); }
 .admin-temporary-password code { flex: 1; }
+.admin-staff-list { display: grid; border-top: 1px solid var(--line); }
+.admin-staff-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 220px) auto; align-items: center; gap: 16px; padding: 14px 4px; border-bottom: 1px solid var(--line); }
+.admin-staff-row > div { display: grid; gap: 5px; min-width: 0; }
+.admin-staff-row strong { color: #f0e9fa; font-size: 13px; }
+.admin-staff-row small { color: #9f94b2; font-size: 10px; }
+.admin-staff-row select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; color: #f2ecfa; background: #171321; }
 @media (max-width: 700px) { .admin-role-form { grid-template-columns: 1fr; }.admin-role-form .button { width: 100%; } }
-@media (max-width: 560px) { .admin-toolbar { align-items: stretch; flex-direction: column; }.admin-account-row { grid-template-columns: minmax(0, 1fr) auto; }.admin-account-row > div:nth-child(2) { grid-column: 1; }.admin-account-row > button { grid-column: 2; grid-row: 1 / span 2; }.admin-form-actions { align-items: stretch; flex-direction: column; }.admin-form-actions .button { width: 100%; }.admin-temporary-password { flex-wrap: wrap; }.admin-temporary-password code { flex-basis: 100%; } }
+@media (max-width: 560px) { .admin-toolbar { align-items: stretch; flex-direction: column; }.admin-account-row { grid-template-columns: minmax(0, 1fr) auto; }.admin-account-row > div:nth-child(2) { grid-column: 1; }.admin-account-row > button { grid-column: 2; grid-row: 1 / span 2; }.admin-staff-row { grid-template-columns: minmax(0, 1fr) auto; }.admin-staff-row select { grid-column: 1; }.admin-staff-row .admin-dismiss { grid-column: 2; grid-row: 1 / span 2; }.admin-form-actions { align-items: stretch; flex-direction: column; }.admin-form-actions .button { width: 100%; }.admin-temporary-password { flex-wrap: wrap; }.admin-temporary-password code { flex-basis: 100%; } }

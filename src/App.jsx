@@ -350,11 +350,13 @@ function AdminPanel() {
   const [accounts, setAccounts] = useState([])
   const [roles, setRoles] = useState([])
   const [actions, setActions] = useState([])
+  const [staff, setStaff] = useState([])
   const [search, setSearch] = useState('')
   const [reload, setReload] = useState(0)
   const [selectedAccount, setSelectedAccount] = useState(null)
   const [actionForm, setActionForm] = useState({ action: 'kick', reason: '', days: '', minutes: 30, roleId: '' })
   const [roleForm, setRoleForm] = useState({ name: '', group: '' })
+  const [staffForm, setStaffForm] = useState({ nick: '', role: 'moderator' })
   const [temporaryPassword, setTemporaryPassword] = useState('')
 
   useEffect(() => {
@@ -380,11 +382,13 @@ function AdminPanel() {
       fetch(api(`/v1/site/admin/accounts?search=${query}`), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       fetch(api('/v1/site/admin/roles'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       fetch(api('/v1/site/admin/actions'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
-    ]).then(([accountData, roleData, actionData]) => {
+      admin.role === 'owner' ? fetch(api('/v1/site/admin/staff'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()) : Promise.resolve(null),
+    ]).then(([accountData, roleData, actionData, staffData]) => {
       if (!active) return
       setAccounts(accountData.accounts)
       setRoles(roleData.roles)
       setActions(actionData.actions)
+      if (staffData) setStaff(staffData.staff)
     }).catch(() => { if (active) setError('Não foi possível carregar os dados administrativos.') })
     return () => { active = false }
   }, [admin, search, reload])
@@ -431,7 +435,7 @@ function AdminPanel() {
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(adminError(data.error))
       setConfigured(true)
-      setAdmin({ nick: data.nick })
+      setAdmin({ nick: data.nick, role: data.role })
       setForm({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
     } catch (authError) {
       setError(authError.message || 'Não foi possível autenticar.')
@@ -506,6 +510,47 @@ function AdminPanel() {
     setReload(value => value + 1)
   }
 
+  async function inviteStaff(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/staff'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(staffForm),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      setStaffForm({ nick: '', role: 'moderator' })
+      setNotice(`${data.nick} convidado como ${staffRoleLabel(data.role)}.`)
+      setReload(value => value + 1)
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível convidar esse membro.')
+    } finally { setBusy(false) }
+  }
+
+  async function changeStaffRole(member, role) {
+    if (!window.confirm(`Alterar o papel de ${member.nick} para ${staffRoleLabel(role)}? A sessão atual será encerrada.`)) return
+    const response = await fetch(api(`/v1/site/admin/staff/${encodeURIComponent(member.nick)}`), {
+      method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) return setError(adminError(data.error))
+    setNotice(`Papel de ${member.nick} atualizado.`)
+    setReload(value => value + 1)
+  }
+
+  async function removeStaff(member) {
+    if (!window.confirm(`Revogar o acesso administrativo de ${member.nick}?`)) return
+    const response = await fetch(api(`/v1/site/admin/staff/${encodeURIComponent(member.nick)}`), { method: 'DELETE', credentials: 'include' })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) return setError(adminError(data.error))
+    setNotice(`Acesso de ${member.nick} revogado.`)
+    setReload(value => value + 1)
+  }
+
   async function copyTemporaryPassword() {
     try {
       await navigator.clipboard.writeText(temporaryPassword)
@@ -519,9 +564,9 @@ function AdminPanel() {
 
   if (admin) return <section className="admin-session section-wrap">
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
-    <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>Sessão administrativa ativa</small></div><span className="admin-session-status">Autenticado</span></div>
+    <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['roles', 'Cargos'], ['actions', 'Atividades']].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
@@ -536,7 +581,7 @@ function AdminPanel() {
       {selectedAccount && <form className="admin-action-form" onSubmit={submitAccountAction}>
         <div className="admin-form-heading"><div><span>AÇÃO PARA</span><strong>{selectedAccount.nick}</strong></div><button type="button" className="admin-dismiss" onClick={() => setSelectedAccount(null)} aria-label="Fechar"><X size={16} /></button></div>
         <label>Ação<select value={actionForm.action} onChange={event => setActionForm(current => ({ ...current, action: event.target.value }))}>
-          {['kick', 'ban', 'unban', 'mute', 'unmute', 'warn', 'reset_password', 'set_role'].map(value => <option key={value} value={value}>{actionLabel(value)}</option>)}
+          {staffActions(admin.role).map(value => <option key={value} value={value}>{actionLabel(value)}</option>)}
         </select></label>
         {['ban', 'kick', 'mute', 'warn'].includes(actionForm.action) && <label>Motivo<textarea required maxLength={200} value={actionForm.reason} onChange={event => setActionForm(current => ({ ...current, reason: event.target.value }))} rows={2} /></label>}
         {actionForm.action === 'ban' && <label>Duração em dias <small>(vazio = permanente)</small><input type="number" min="1" max="3650" value={actionForm.days} onChange={event => setActionForm(current => ({ ...current, days: event.target.value }))} /></label>}
@@ -550,6 +595,10 @@ function AdminPanel() {
       <div className="admin-role-list">{roles.map(role => <article className="admin-role-row" key={role.id}><div><strong>{role.name}</strong><small>LuckPerms</small></div><code>{role.group}</code><button className="admin-dismiss" onClick={() => deleteRole(role)} aria-label={`Remover ${role.name}`} title="Remover mapeamento"><X size={16} /></button></article>)}{roles.length === 0 && <p className="admin-empty">Nenhum cargo mapeado ainda.</p>}</div>
     </div>}
     {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {action.createdAt}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
+    {tab === 'staff' && admin.role === 'owner' && <div className="admin-workspace">
+      <form className="admin-role-form" onSubmit={inviteStaff}><label>Nick cadastrado no servidor<input required pattern="\.?[A-Za-z0-9_]{3,16}" value={staffForm.nick} onChange={event => setStaffForm(current => ({ ...current, nick: event.target.value }))} placeholder="Nick exato da conta" /></label><label>Papel<select value={staffForm.role} onChange={event => setStaffForm(current => ({ ...current, role: event.target.value }))}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select></label><button className="button button-primary" type="submit" disabled={busy}>Convidar <ChevronRight size={17} /></button></form>
+      <div className="admin-staff-list">{staff.map(member => <article className="admin-staff-row" key={member.nick}><div><strong>{member.nick}</strong><small>{member.configured ? 'Acesso configurado' : 'Aguardando primeiro acesso'}</small></div><select aria-label={`Papel de ${member.nick}`} value={member.role} onChange={event => changeStaffRole(member, event.target.value)}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select><button className="admin-dismiss" onClick={() => removeStaff(member)} aria-label={`Revogar acesso de ${member.nick}`} title="Revogar acesso"><X size={16} /></button></article>)}{staff.length === 0 && <p className="admin-empty">Nenhum membro convidado.</p>}</div>
+    </div>}
   </section>
 
   return <section className="admin-gate section-wrap">
@@ -587,7 +636,22 @@ function adminError(code) {
     account_not_found: 'Conta não encontrada.',
     invalid_reason: 'Informe um motivo com até 200 caracteres.',
     invalid_duration: 'Duração inválida.',
+    invalid_staff: 'Nick ou papel de equipe inválido.',
+    staff_exists: 'Esse jogador já faz parte da equipe.',
+    staff_not_found: 'Membro da equipe não encontrado.',
+    cannot_change_owner: 'O acesso do proprietário não pode ser alterado.',
+    forbidden: 'Seu papel não permite essa ação.',
   })[code] || 'Não foi possível completar a solicitação.'
+}
+
+function staffRoleLabel(role) {
+  return ({ owner: 'Proprietário', admin: 'Administrador', moderator: 'Moderador', helper: 'Ajudante' })[role] || 'Equipe'
+}
+
+function staffActions(role) {
+  if (role === 'owner' || role === 'admin') return ['kick', 'ban', 'unban', 'mute', 'unmute', 'warn', 'reset_password', 'set_role']
+  if (role === 'moderator') return ['kick', 'ban', 'unban', 'mute', 'unmute', 'warn']
+  return ['mute', 'unmute', 'warn']
 }
 
 function actionLabel(action) {

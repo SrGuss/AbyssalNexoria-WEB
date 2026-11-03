@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
@@ -7,6 +8,8 @@ import {
 
 const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
 const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21.8/items/'
+const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || ''
+if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' })
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
@@ -253,6 +256,9 @@ function StorePage({ player, onLogin }) {
   })
   const [loading, setLoading] = useState(true)
   const [checkoutBusy, setCheckoutBusy] = useState(false)
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [paymentResult, setPaymentResult] = useState(null)
+  const [pendingOrderId, setPendingOrderId] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -267,6 +273,28 @@ function StorePage({ player, onLogin }) {
   useEffect(() => {
     localStorage.setItem('nexoria-store-cart', JSON.stringify(cart))
   }, [cart])
+
+  useEffect(() => {
+    if (!pendingOrderId) return
+    let active = true
+    const checkOrder = async () => {
+      const response = await fetch(api(`/v1/site/store/orders/${encodeURIComponent(pendingOrderId)}`), { credentials: 'include' }).catch(() => null)
+      if (!response?.ok) return
+      const order = await response.json().catch(() => null)
+      if (!active || !order) return
+      if (order.status === 'paid') {
+        setPaymentResult(current => ({ ...current, status: 'approved' }))
+        setCart({})
+        setPendingOrderId('')
+      } else if (order.status === 'failed') {
+        setPaymentResult(current => ({ ...current, status: 'failed' }))
+        setPendingOrderId('')
+      }
+    }
+    checkOrder()
+    const timer = window.setInterval(checkOrder, 5000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [pendingOrderId])
 
   const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
   const cartItems = catalog.products.filter(product => Number(cart[product.id]) > 0)
@@ -283,27 +311,50 @@ function StorePage({ player, onLogin }) {
     })
   }
 
-  async function checkout() {
+  function checkout() {
     if (!player) return onLogin()
+    setCheckoutOpen(true)
+    setError('')
+  }
+
+  async function submitPayment({ formData }) {
     setCheckoutBusy(true)
     setError('')
     try {
-      const response = await fetch(api('/v1/site/store/orders'), {
+      const response = await fetch(api('/v1/site/store/payments'), {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]) })) }),
+        body: JSON.stringify({
+          items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]) })),
+          payment: formData,
+        }),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) {
         const messages = {
           payments_not_configured: 'O pagamento ainda não está configurado pela administração.',
+          invalid_cart: 'O carrinho está inválido. Atualize a loja e tente novamente.',
+          invalid_total: 'O total da compra está inválido. Revise o carrinho.',
           products_unavailable: 'Algum produto mudou. Atualize a loja e revise o carrinho.',
-          checkout_unavailable: 'Não foi possível iniciar o pagamento. Tente novamente.',
+          invalid_payment_data: 'Confira os dados do pagador e tente novamente.',
+          payment_rejected: 'O pagamento não foi autorizado. Confira os dados ou escolha outro método.',
+          payment_verification_failed: 'Não foi possível confirmar o valor do pagamento. Entre em contato com o suporte.',
+          checkout_unavailable: 'O Mercado Pago está indisponível. Tente novamente.',
         }
-        throw new Error(messages[data.error] || 'Não foi possível iniciar o pagamento.')
+        const message = messages[data.error]
+          || `A API de pagamento respondeu com erro HTTP ${response.status}. Confirme se a versão atualizada da API foi publicada.`
+        throw new Error(message)
       }
-      window.location.assign(data.checkoutUrl)
+      if (['rejected', 'cancelled'].includes(data.status))
+        throw new Error('O pagamento não foi autorizado. Confira os dados ou escolha outro método.')
+      setPaymentResult(data)
+      if (data.status === 'approved') setCart({})
+      else if (data.status === 'pending' || data.status === 'in_process') setPendingOrderId(data.orderId)
+      else throw new Error('O Mercado Pago retornou um status de pagamento inesperado.')
+      return data
     } catch (requestError) {
       setError(requestError.message || 'Não foi possível iniciar o pagamento.')
+      throw requestError
+    } finally {
       setCheckoutBusy(false)
     }
   }
@@ -338,8 +389,25 @@ function StorePage({ player, onLogin }) {
         </article>)}</div> : <p className="store-cart-empty">Seu carrinho está vazio.</p>}
         <div className="store-cart-total"><span>Total</span><strong>{money(total)}</strong></div>
         {error && <p className="login-error" role="alert">{error}</p>}
-        <button className="button button-primary store-checkout" disabled={!cartItems.length || checkoutBusy} onClick={checkout}>{checkoutBusy ? 'Conectando ao Mercado Pago…' : player ? 'Finalizar compra' : 'Entrar para continuar'} <ChevronRight size={17} /></button>
+        {!checkoutOpen && <button className="button button-primary store-checkout" disabled={!cartItems.length || checkoutBusy} onClick={checkout}>{player ? 'Continuar para pagamento' : 'Entrar para continuar'} <ChevronRight size={17} /></button>}
         <small className="store-payment-note">Pagamento processado com segurança pelo Mercado Pago.</small>
+        {checkoutOpen && <section className="store-payment-form" aria-label="Pagamento transparente">
+          <div className="store-payment-heading"><strong>Pagamento</strong><button className="admin-dismiss" onClick={() => { setCheckoutOpen(false); setPaymentResult(null); setError('') }} aria-label="Fechar pagamento"><X size={15} /></button></div>
+          {paymentResult?.status === 'approved' ? <div className="store-payment-state success"><Check size={19} /><div><strong>Pagamento aprovado</strong><small>Seu pedido foi confirmado.</small></div></div> : paymentResult?.status === 'pending' || paymentResult?.status === 'in_process' ? <div className="store-payment-state"><Clock3 size={19} /><div><strong>Aguardando confirmação</strong><small>{paymentResult.pixQrCode ? 'Pague com o Pix para concluir o pedido.' : 'Estamos aguardando a confirmação do Mercado Pago.'}</small></div>
+            {paymentResult.pixQrCodeBase64 && <img className="store-pix-qr" src={`data:image/png;base64,${paymentResult.pixQrCodeBase64}`} alt="QR Code Pix para pagamento" />}
+            {paymentResult.pixQrCode && <label className="store-pix-code">Código Pix<input readOnly value={paymentResult.pixQrCode} onFocus={event => event.target.select()} /></label>}
+            {paymentResult.ticketUrl && <a className="button button-ghost" href={paymentResult.ticketUrl} target="_blank" rel="noreferrer">Abrir boleto</a>}
+          </div> : paymentResult?.status === 'failed' ? <div className="store-payment-state failed"><X size={19} /><div><strong>Pagamento não concluído</strong><small>Tente iniciar outro pagamento.</small></div></div> : MP_PUBLIC_KEY ? <>
+            <p className="store-payment-hint">Informe os dados solicitados pelo Mercado Pago.</p>
+            <Payment
+              initialization={{ amount: total / 100 }}
+              customization={{ paymentMethods: { creditCard: 'all', debitCard: 'all', bankTransfer: 'all', maxInstallments: 6 } }}
+              onSubmit={submitPayment}
+              onError={() => setError('Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.')}
+              locale="pt-BR"
+            />
+          </> : <p className="login-error">Configure `VITE_MP_PUBLIC_KEY` no ambiente de build do site para carregar o formulário.</p>}
+        </section>}
       </aside>
     </div>
   </section>

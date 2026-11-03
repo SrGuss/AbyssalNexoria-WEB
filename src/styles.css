@@ -292,6 +292,19 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .store-checkout { width: 100%; }
 .store-checkout:disabled { cursor: not-allowed; opacity: .5; transform: none; }
 .store-payment-note { display: block; margin-top: 11px; color: #80788e; text-align: center; font-size: 9px; line-height: 1.5; }
+.store-payment-form { margin-top: 17px; padding-top: 15px; border-top: 1px solid var(--line); }
+.store-payment-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: #eee8f5; font-size: 12px; }
+.store-payment-hint { margin: 0 0 12px; color: #a79db7; font-size: 10px; line-height: 1.6; }
+.store-payment-state { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 10px; padding: 14px; border: 1px solid rgba(220,190,103,.22); border-radius: 7px; color: #e2c978; background: rgba(167,130,38,.07); }
+.store-payment-state.success { border-color: rgba(107,211,175,.25); color: #91d6ae; background: rgba(54,164,125,.07); }
+.store-payment-state.failed { border-color: rgba(219,93,116,.25); color: #e17a8d; background: rgba(167,45,76,.07); }
+.store-payment-state > div { display: grid; gap: 5px; }
+.store-payment-state strong { color: #f0e9fa; font-size: 11px; }
+.store-payment-state small { color: #a79db7; font-size: 10px; line-height: 1.5; }
+.store-pix-qr { grid-column: 1 / -1; width: min(100%, 190px); aspect-ratio: 1; justify-self: center; padding: 8px; border-radius: 5px; background: white; image-rendering: pixelated; }
+.store-pix-code { grid-column: 1 / -1; display: grid; gap: 6px; color: #bcb2cd; font-size: 10px; }
+.store-pix-code input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 5px; color: #e8e1f3; background: #0c0a14; font: 10px/1.5 'DM Sans', sans-serif; }
+.store-payment-state > .button { grid-column: 1 / -1; margin-top: 5px; }
 .store-status { padding: 18px 0; color: #a79db7; font-size: 12px; }
 .store-empty { min-height: 250px; display: grid; align-content: center; justify-items: center; padding: 30px; border: 1px dashed rgba(190,170,255,.2); border-radius: 8px; color: #aaa2be; text-align: center; }
 .store-empty svg { margin-bottom: 12px; color: #8fae9c; }

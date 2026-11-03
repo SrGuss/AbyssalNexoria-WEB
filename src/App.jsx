@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
@@ -10,6 +10,7 @@ const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
 const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21.8/items/'
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || ''
 if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' })
+const MP_PAYMENT_CUSTOMIZATION = { paymentMethods: { creditCard: 'all', debitCard: 'all', bankTransfer: 'all', maxInstallments: 6 } }
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
@@ -297,8 +298,9 @@ function StorePage({ player, onLogin }) {
   }, [pendingOrderId])
 
   const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
-  const cartItems = catalog.products.filter(product => Number(cart[product.id]) > 0)
-  const total = cartItems.reduce((sum, product) => sum + product.priceCents * Number(cart[product.id]), 0)
+  const cartItems = useMemo(() => catalog.products.filter(product => Number(cart[product.id]) > 0), [catalog.products, cart])
+  const total = useMemo(() => cartItems.reduce((sum, product) => sum + product.priceCents * Number(cart[product.id]), 0), [cartItems, cart])
+  const paymentInitialization = useMemo(() => ({ amount: total / 100 }), [total])
   const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   function changeQuantity(id, amount) {
@@ -317,7 +319,7 @@ function StorePage({ player, onLogin }) {
     setError('')
   }
 
-  async function submitPayment({ formData }) {
+  const submitPayment = useCallback(async ({ formData }) => {
     setCheckoutBusy(true)
     setError('')
     try {
@@ -357,7 +359,11 @@ function StorePage({ player, onLogin }) {
     } finally {
       setCheckoutBusy(false)
     }
-  }
+  }, [cartItems, cart])
+
+  const handlePaymentError = useCallback(() => {
+    setError('Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.')
+  }, [])
 
   return <section className="store-page section-wrap" id="loja">
     <div className="store-heading">
@@ -400,10 +406,10 @@ function StorePage({ player, onLogin }) {
           </div> : paymentResult?.status === 'failed' ? <div className="store-payment-state failed"><X size={19} /><div><strong>Pagamento não concluído</strong><small>Tente iniciar outro pagamento.</small></div></div> : MP_PUBLIC_KEY ? <>
             <p className="store-payment-hint">Informe os dados solicitados pelo Mercado Pago.</p>
             <Payment
-              initialization={{ amount: total / 100 }}
-              customization={{ paymentMethods: { creditCard: 'all', debitCard: 'all', bankTransfer: 'all', maxInstallments: 6 } }}
+              initialization={paymentInitialization}
+              customization={MP_PAYMENT_CUSTOMIZATION}
               onSubmit={submitPayment}
-              onError={() => setError('Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.')}
+              onError={handlePaymentError}
               locale="pt-BR"
             />
           </> : <p className="login-error">Configure `VITE_MP_PUBLIC_KEY` no ambiente de build do site para carregar o formulário.</p>}

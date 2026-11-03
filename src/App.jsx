@@ -349,6 +349,7 @@ function AdminPanel() {
   const [tab, setTab] = useState('accounts')
   const [accounts, setAccounts] = useState([])
   const [roles, setRoles] = useState([])
+  const [luckPermsCatalog, setLuckPermsCatalog] = useState({ available: false, syncedAt: null, groups: [] })
   const [actions, setActions] = useState([])
   const [staff, setStaff] = useState([])
   const [search, setSearch] = useState('')
@@ -356,6 +357,7 @@ function AdminPanel() {
   const [selectedAccount, setSelectedAccount] = useState(null)
   const [actionForm, setActionForm] = useState({ action: 'kick', reason: '', days: '', minutes: 30, roleId: '' })
   const [roleForm, setRoleForm] = useState({ name: '', group: '' })
+  const [editingRoleId, setEditingRoleId] = useState(null)
   const [staffForm, setStaffForm] = useState({ nick: '', role: 'moderator' })
   const [temporaryPassword, setTemporaryPassword] = useState('')
 
@@ -381,12 +383,14 @@ function AdminPanel() {
     Promise.all([
       fetch(api(`/v1/site/admin/accounts?search=${query}`), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       fetch(api('/v1/site/admin/roles'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
+      fetch(api('/v1/site/admin/luckperms/groups'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       fetch(api('/v1/site/admin/actions'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       admin.role === 'owner' ? fetch(api('/v1/site/admin/staff'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()) : Promise.resolve(null),
-    ]).then(([accountData, roleData, actionData, staffData]) => {
+    ]).then(([accountData, roleData, groupsData, actionData, staffData]) => {
       if (!active) return
       setAccounts(accountData.accounts)
       setRoles(roleData.roles)
+      setLuckPermsCatalog(groupsData)
       setActions(actionData.actions)
       if (staffData) setStaff(staffData.staff)
     }).catch(() => { if (active) setError('Não foi possível carregar os dados administrativos.') })
@@ -487,14 +491,16 @@ function AdminPanel() {
     setError('')
     setNotice('')
     try {
-      const response = await fetch(api('/v1/site/admin/roles'), {
-        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      const editing = editingRoleId != null
+      const response = await fetch(api(editing ? `/v1/site/admin/roles/${editingRoleId}` : '/v1/site/admin/roles'), {
+        method: editing ? 'PATCH' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roleForm),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(adminError(data.error))
       setRoleForm({ name: '', group: '' })
-      setNotice('Cargo mapeado ao grupo LuckPerms.')
+      setEditingRoleId(null)
+      setNotice(editing ? 'Mapeamento atualizado.' : 'Cargo mapeado ao grupo LuckPerms.')
       setReload(value => value + 1)
     } catch (requestError) {
       setError(requestError.message || 'Não foi possível salvar o cargo.')
@@ -507,7 +513,13 @@ function AdminPanel() {
     const data = await response.json().catch(() => ({}))
     if (!response.ok) return setError(adminError(data.error))
     setNotice('Mapeamento removido.')
+    if (editingRoleId === role.id) { setEditingRoleId(null); setRoleForm({ name: '', group: '' }) }
     setReload(value => value + 1)
+  }
+
+  function editRole(role) {
+    setEditingRoleId(role.id)
+    setRoleForm({ name: role.name, group: role.group })
   }
 
   async function inviteStaff(event) {
@@ -591,8 +603,10 @@ function AdminPanel() {
       </form>}
     </div>}
     {tab === 'roles' && <div className="admin-workspace">
-      <form className="admin-role-form" onSubmit={createRole}><label>Nome do cargo<input required minLength={2} maxLength={32} value={roleForm.name} onChange={event => setRoleForm(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: Guardião" /></label><label>Grupo LuckPerms<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={roleForm.group} onChange={event => setRoleForm(current => ({ ...current, group: event.target.value }))} placeholder="Ex.: guardiao" /></label><button className="button button-primary" type="submit" disabled={busy}>Adicionar cargo <ChevronRight size={17} /></button></form>
-      <div className="admin-role-list">{roles.map(role => <article className="admin-role-row" key={role.id}><div><strong>{role.name}</strong><small>LuckPerms</small></div><code>{role.group}</code><button className="admin-dismiss" onClick={() => deleteRole(role)} aria-label={`Remover ${role.name}`} title="Remover mapeamento"><X size={16} /></button></article>)}{roles.length === 0 && <p className="admin-empty">Nenhum cargo mapeado ainda.</p>}</div>
+      <div className="admin-lp-status"><div><strong>{luckPermsCatalog.available ? `${luckPermsCatalog.groups.length} grupos detectados` : 'LuckPerms indisponível'}</strong><small>{luckPermsCatalog.syncedAt ? `Sincronizado ${luckPermsCatalog.syncedAt}` : 'Aguardando sincronização da Bridge'}</small></div><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar lista</button></div>
+      {!luckPermsCatalog.available && <p className="admin-lp-warning">Confirme que LuckPerms e a NexoriaBridge atualizada estão ativos no servidor.</p>}
+      <form className="admin-role-form" onSubmit={createRole}><label>Nome do cargo<input required minLength={2} maxLength={32} value={roleForm.name} onChange={event => setRoleForm(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: Guardião" /></label><label>Grupo LuckPerms<select required disabled={!luckPermsCatalog.available} value={roleForm.group} onChange={event => setRoleForm(current => ({ ...current, group: event.target.value }))}><option value="">Selecione um grupo</option>{roleForm.group && !luckPermsCatalog.groups.includes(roleForm.group) && <option value={roleForm.group}>{roleForm.group} · grupo não encontrado</option>}{luckPermsCatalog.groups.filter(group => group.toLowerCase() !== 'default').map(group => <option key={group} value={group}>{group}</option>)}</select></label><div className="admin-role-form-actions"><button className="button button-primary" type="submit" disabled={busy || !luckPermsCatalog.available || !roleForm.group}>{busy ? 'Salvando…' : editingRoleId ? 'Salvar mapping' : 'Adicionar cargo'} <ChevronRight size={17} /></button>{editingRoleId && <button className="admin-back" type="button" onClick={() => { setEditingRoleId(null); setRoleForm({ name: '', group: '' }) }}>Cancelar edição</button>}</div></form>
+      <div className="admin-role-list">{roles.map(role => <article className="admin-role-row" key={role.id}><div><strong>{role.name}</strong><small>{luckPermsCatalog.groups.includes(role.group) ? 'Grupo detectado' : 'Grupo não encontrado no LuckPerms'}</small></div><code>{role.group}</code><div className="admin-role-actions"><button className="refresh-button" onClick={() => editRole(role)}>Editar</button><button className="admin-dismiss" onClick={() => deleteRole(role)} aria-label={`Remover ${role.name}`} title="Remover mapeamento"><X size={16} /></button></div></article>)}{roles.length === 0 && <p className="admin-empty">Nenhum cargo mapeado ainda.</p>}</div>
     </div>}
     {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {action.createdAt}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
     {tab === 'staff' && admin.role === 'owner' && <div className="admin-workspace">
@@ -636,6 +650,9 @@ function adminError(code) {
     account_not_found: 'Conta não encontrada.',
     invalid_reason: 'Informe um motivo com até 200 caracteres.',
     invalid_duration: 'Duração inválida.',
+    luckperms_unavailable: 'A lista LuckPerms ainda não está sincronizada com a Bridge.',
+    luckperms_group_not_found: 'Esse grupo não existe no catálogo LuckPerms atual.',
+    role_not_found: 'Cargo não encontrado.',
     invalid_staff: 'Nick ou papel de equipe inválido.',
     staff_exists: 'Esse jogador já faz parte da equipe.',
     staff_not_found: 'Membro da equipe não encontrado.',

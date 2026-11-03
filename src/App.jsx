@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import {
-  ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles,
+  ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
-  MapPin, Clock3, Coins, Backpack
+  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save
 } from 'lucide-react'
 
 const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
@@ -11,50 +11,6 @@ const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
-
-const ranks = [
-  {
-    name: 'Eco',
-    subtitle: 'O primeiro passo',
-    price: 'R$ 9,90',
-    color: 'mint',
-    icon: Sparkles,
-    perks: ['Prefixo exclusivo', 'Kit inicial especial', 'Acesso a cosméticos básicos'],
-  },
-  {
-    name: 'Arauto',
-    subtitle: 'O chamado do abismo',
-    price: 'R$ 19,90',
-    color: 'blue',
-    icon: Sword,
-    perks: ['Todos os benefícios Eco', 'Mais opções de personalização', 'Kit de aventura'],
-  },
-  {
-    name: 'Senhor',
-    subtitle: 'Domine as sombras',
-    price: 'R$ 29,90',
-    color: 'violet',
-    icon: Shield,
-    perks: ['Todos os benefícios Arauto', 'Cosméticos avançados', 'Benefícios extras de progressão'],
-    featured: true,
-  },
-  {
-    name: 'Soberano',
-    subtitle: 'A coroa esquecida',
-    price: 'R$ 39,90',
-    color: 'gold',
-    icon: Crown,
-    perks: ['Todos os benefícios Senhor', 'Efeitos visuais exclusivos', 'Kit premium'],
-  },
-  {
-    name: 'Ascendente',
-    subtitle: 'Além dos limites',
-    price: 'R$ 49,90',
-    color: 'cosmic',
-    icon: Gem,
-    perks: ['Todos os benefícios Soberano', 'Cosméticos lendários', 'Reconhecimento especial'],
-  },
-]
 
 function loadMe() {
   return fetch(api('/v1/site/me'), { credentials: 'include' })
@@ -66,13 +22,12 @@ function loadMe() {
 function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [selectedRank, setSelectedRank] = useState(null)
   const [player, setPlayer] = useState(null)
   const [loginOpen, setLoginOpen] = useState(false)
   const [credentials, setCredentials] = useState({ nick: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
-  const [page, setPage] = useState(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : 'home')
+  const [page, setPage] = useState(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : window.location.hash === '#loja' ? 'store' : 'home')
 
   useEffect(() => {
     // Remove os favicons anteriores
@@ -95,10 +50,14 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const syncPage = () => setPage(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : 'home')
+    const syncPage = () => setPage(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : window.location.hash === '#loja' ? 'store' : 'home')
     window.addEventListener('hashchange', syncPage)
     return () => window.removeEventListener('hashchange', syncPage)
   }, [])
+
+  useEffect(() => {
+    if (page === 'store') window.scrollTo(0, 0)
+  }, [page])
 
   useEffect(() => {
     if (!player?.id || page !== 'account') return
@@ -118,11 +77,6 @@ function App() {
     }
   }
 
-  function startPurchase(rank) {
-    setSelectedRank(rank)
-    document.getElementById('loja')?.scrollIntoView({ behavior: 'smooth' })
-  }
-
   async function login(event) {
     event.preventDefault()
     setLoggingIn(true)
@@ -135,7 +89,7 @@ function App() {
       setPlayer(await loadMe())
       setLoginOpen(false)
       setCredentials({ nick: '', password: '' })
-      window.location.hash = 'conta'
+      window.location.hash = page === 'store' ? 'loja' : 'conta'
     } catch (error) {
       setLoginError(error.message || 'Não foi possível entrar.')
     } finally { setLoggingIn(false) }
@@ -175,7 +129,7 @@ function App() {
         <nav className={menuOpen ? 'nav nav-open' : 'nav'}>
           <a href="#" onClick={() => setMenuOpen(false)}>Início</a>
           <a href="#universo" onClick={() => setMenuOpen(false)}>O universo</a>
-          <a href="#loja" onClick={() => setMenuOpen(false)}>Loja VIP</a>
+          <a href="#loja" onClick={() => setMenuOpen(false)}>Loja</a>
           <a href="#como-jogar" onClick={() => setMenuOpen(false)}>Como jogar</a>
           <a className="nav-cta" href="#loja" onClick={() => setMenuOpen(false)}>Explorar loja <ArrowUpRight size={16} /></a>
           <button className="account-link" onClick={openAccount}>{player ? <><Compass size={15} /> Minha conta</> : <><LogIn size={15} /> Minha conta</>}</button>
@@ -184,7 +138,7 @@ function App() {
         </nav>
       </header>
 
-      <main>{page === 'admin' ? <AdminPanel /> : page === 'account' ? (
+      <main>{page === 'admin' ? <AdminPanel /> : page === 'store' ? <StorePage player={player} onLogin={() => setLoginOpen(true)} /> : page === 'account' ? (
         player ? <PlayerPanel player={player} onRefresh={refreshNow} /> : <section className="account-gate section-wrap"><span className="login-mark"><Shield size={24} /></span><h1>Área <span>restrita.</span></h1><p>Entre com sua conta do servidor para acessar seu perfil, inventário e progresso.</p><button className="button button-primary" onClick={() => setLoginOpen(true)}>Entrar na conta <LogIn size={17} /></button></section>
       ) : <>
         <section className="hero" id="inicio">
@@ -241,34 +195,14 @@ function App() {
           </div>
         </section>
 
-        <section className="shop-section" id="loja">
+        <section className="shop-section" id="vitrine">
           <div className="section-wrap">
             <div className="section-kicker"><span>02</span> A LOJA DO ABISMO</div>
             <div className="shop-heading">
               <div><h2>Seu próximo nível<br />começa <span>aqui.</span></h2></div>
-              <p>Escolha seu rank e prepare-se para viver Nexoria de uma nova perspectiva. Os valores e benefícios abaixo são demonstrativos nesta primeira versão.</p>
+              <p>Vantagens, itens e novidades de Nexoria reunidos em um só lugar.</p>
             </div>
-            <div className="rank-grid">
-              {ranks.map((rank, index) => {
-                const Icon = rank.icon
-                return (
-                  <article className={`rank-card ${rank.color} ${rank.featured ? 'rank-featured' : ''} ${selectedRank === rank.name ? 'rank-selected' : ''}`} key={rank.name}>
-                    {rank.featured && <div className="popular-tag">MAIS ESCOLHIDO</div>}
-                    <div className="rank-top"><span className="rank-icon"><Icon size={24} /></span><span className="rank-number">0{index + 1}</span></div>
-                    <p className="rank-subtitle">{rank.subtitle}</p>
-                    <h3>{rank.name}</h3>
-                    <div className="price">{rank.price}<span> / 30 dias</span></div>
-                    <div className="rank-divider" />
-                    <ul>{rank.perks.map(perk => <li key={perk}><Check size={15} />{perk}</li>)}</ul>
-                    <button className="rank-button" onClick={() => startPurchase(rank.name)}>Escolher rank <ArrowUpRight size={16} /></button>
-                  </article>
-                )
-              })}
-            </div>
-            <div className="shop-disclaimer">
-              <Shield size={17} />
-              <p><strong>Compra segura em construção.</strong> O checkout ainda não está conectado. Nenhum pagamento será realizado nesta versão.</p>
-            </div>
+            <a className="button button-primary store-visit" href="#loja"><ShoppingCart size={17} /> Abrir loja <ArrowUpRight size={16} /></a>
           </div>
         </section>
 
@@ -309,6 +243,106 @@ function App() {
       </footer>
     </div>
   )
+}
+
+function StorePage({ player, onLogin }) {
+  const [catalog, setCatalog] = useState({ categories: [], products: [] })
+  const [category, setCategory] = useState('all')
+  const [cart, setCart] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nexoria-store-cart') || '{}') } catch { return {} }
+  })
+  const [loading, setLoading] = useState(true)
+  const [checkoutBusy, setCheckoutBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetch(api('/v1/site/store/catalog')).then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => { if (active) setCatalog(data) })
+      .catch(() => { if (active) setError('Não foi possível carregar a loja.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('nexoria-store-cart', JSON.stringify(cart))
+  }, [cart])
+
+  const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
+  const cartItems = catalog.products.filter(product => Number(cart[product.id]) > 0)
+  const total = cartItems.reduce((sum, product) => sum + product.priceCents * Number(cart[product.id]), 0)
+  const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  function changeQuantity(id, amount) {
+    setCart(current => {
+      const next = { ...current }
+      const quantity = Math.min(99, Math.max(0, Number(next[id] || 0) + amount))
+      if (quantity) next[id] = quantity
+      else delete next[id]
+      return next
+    })
+  }
+
+  async function checkout() {
+    if (!player) return onLogin()
+    setCheckoutBusy(true)
+    setError('')
+    try {
+      const response = await fetch(api('/v1/site/store/orders'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]) })) }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const messages = {
+          payments_not_configured: 'O pagamento ainda não está configurado pela administração.',
+          products_unavailable: 'Algum produto mudou. Atualize a loja e revise o carrinho.',
+          checkout_unavailable: 'Não foi possível iniciar o pagamento. Tente novamente.',
+        }
+        throw new Error(messages[data.error] || 'Não foi possível iniciar o pagamento.')
+      }
+      window.location.assign(data.checkoutUrl)
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível iniciar o pagamento.')
+      setCheckoutBusy(false)
+    }
+  }
+
+  return <section className="store-page section-wrap" id="loja">
+    <div className="store-heading">
+      <div><div className="section-kicker"><span>ABYSSAL NEXORIA · LOJA OFICIAL</span></div><h1>Escolha sua <span>vantagem.</span></h1><p>Benefícios e produtos para sua próxima jornada.</p></div>
+      <div className="store-player">{player ? <><Shield size={16} /><span>Comprando para <strong>{player.nick}</strong></span></> : <button className="refresh-button" onClick={onLogin}><LogIn size={15} /> Entrar para comprar</button>}</div>
+    </div>
+    <div className="store-layout">
+      <div className="store-catalog">
+        <nav className="store-categories" aria-label="Categorias da loja">
+          <button className={category === 'all' ? 'active' : ''} onClick={() => setCategory('all')}>Todos</button>
+          {catalog.categories.map(item => <button key={item.id} className={category === item.id ? 'active' : ''} onClick={() => setCategory(item.id)}>{item.name}</button>)}
+        </nav>
+        {loading ? <p className="store-status">Carregando produtos…</p> : visibleProducts.length ? <div className="store-products">
+          {visibleProducts.map(product => <article className="store-product" key={product.id}>
+            <div className="store-product-art">{product.kind === 'vip' ? <Crown size={24} /> : <Package size={24} />}</div>
+            <span className="store-product-category">{product.category}</span>
+            <h2>{product.name}</h2>
+            <p>{product.description || 'Um novo benefício para sua jornada.'}</p>
+            {product.kind === 'vip' && <small className="store-product-duration">{product.durationDays ? `${product.durationDays} dias` : 'Permanente'}</small>}
+            <div className="store-product-bottom"><strong>{money(product.priceCents)}</strong><button className="store-add" onClick={() => changeQuantity(product.id, 1)} aria-label={`Adicionar ${product.name} ao carrinho`} title="Adicionar ao carrinho"><Plus size={17} /></button></div>
+          </article>)}
+        </div> : <div className="store-empty"><ShoppingCart size={25} /><h2>{loading ? 'Carregando…' : 'A loja está sendo preparada.'}</h2><p>{loading ? '' : 'Novos produtos estarão disponíveis em breve.'}</p></div>}
+      </div>
+      <aside className="store-cart" aria-label="Carrinho">
+        <div className="store-cart-heading"><h2><ShoppingCart size={18} /> Carrinho</h2><span>{cartItems.reduce((count, item) => count + Number(cart[item.id]), 0)}</span></div>
+        {cartItems.length ? <div className="store-cart-items">{cartItems.map(item => <article className="store-cart-item" key={item.id}>
+          <div className="store-cart-item-title"><strong>{item.name}</strong><small>{money(item.priceCents)} cada</small></div>
+          <div className="store-quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Diminuir ${item.name}`}><Minus size={13} /></button><span>{cart[item.id]}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Aumentar ${item.name}`}><Plus size={13} /></button><button className="store-remove" onClick={() => setCart(current => { const next = { ...current }; delete next[item.id]; return next })} aria-label={`Remover ${item.name}`}><Trash2 size={14} /></button></div>
+        </article>)}</div> : <p className="store-cart-empty">Seu carrinho está vazio.</p>}
+        <div className="store-cart-total"><span>Total</span><strong>{money(total)}</strong></div>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button className="button button-primary store-checkout" disabled={!cartItems.length || checkoutBusy} onClick={checkout}>{checkoutBusy ? 'Conectando ao Mercado Pago…' : player ? 'Finalizar compra' : 'Entrar para continuar'} <ChevronRight size={17} /></button>
+        <small className="store-payment-note">Pagamento processado com segurança pelo Mercado Pago.</small>
+      </aside>
+    </div>
+  </section>
 }
 
 function PlayerPanel({ player, onRefresh }) {
@@ -594,11 +628,12 @@ function AdminPanel() {
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
     {temporaryPassword && <div className="admin-temporary-password"><code>{temporaryPassword}</code><button className="refresh-button" onClick={copyTemporaryPassword}><Copy size={14} /> Copiar</button><button className="admin-dismiss" onClick={() => setTemporaryPassword('')} aria-label="Ocultar senha"><X size={15} /></button></div>}
+    {tab === 'store' && ['owner', 'admin'].includes(admin.role) && <StoreEditor />}
     {tab === 'accounts' && <div className="admin-workspace">
       <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
       <div className="admin-account-list">{accounts.map(account => <article className="admin-account-row" key={account.id}>
@@ -651,6 +686,116 @@ function AdminPanel() {
       {error && <p className="login-error" role="alert">{error}</p>}
     </div>
   </section>
+}
+
+function StoreEditor() {
+  const [catalog, setCatalog] = useState({ categories: [], products: [] })
+  const [editorMode, setEditorMode] = useState(false)
+  const [editingProduct, setEditingProduct] = useState(null)
+  const [categoryForm, setCategoryForm] = useState({ id: null, name: '' })
+  const [productForm, setProductForm] = useState({ name: '', description: '', categoryId: '', price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true })
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [revision, setRevision] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    fetch(api('/v1/site/admin/store'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => { if (active) setCatalog(data) })
+      .catch(() => { if (active) setError('Não foi possível carregar o catálogo administrativo.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [revision])
+
+  async function send(path, method, body) {
+    const response = await fetch(api(path), {
+      method, credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const messages = {
+        invalid_category: 'A categoria precisa ter entre 2 e 40 caracteres.', category_exists: 'Já existe uma categoria com esse nome.',
+        category_not_empty: 'Mova os produtos desta categoria antes de removê-la.',
+        invalid_product: 'Revise os campos do produto. VIP exige grupo; produto exige código para o plugin.',
+      }
+      throw new Error(messages[data.error] || 'Não foi possível salvar as alterações.')
+    }
+    return data
+  }
+
+  async function saveCategory(event) {
+    event.preventDefault()
+    setBusy(true); setError(''); setNotice('')
+    try {
+      await send(categoryForm.id ? `/v1/site/admin/store/categories/${categoryForm.id}` : '/v1/site/admin/store/categories', categoryForm.id ? 'PATCH' : 'POST', { name: categoryForm.name })
+      setCategoryForm({ id: null, name: '' }); setNotice('Categoria salva.'); setRevision(value => value + 1)
+    } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+
+  async function deleteCategory(category) {
+    if (!window.confirm(`Remover a categoria ${category.name}?`)) return
+    setError(''); setNotice('')
+    try { await send(`/v1/site/admin/store/categories/${category.id}`, 'DELETE'); setNotice('Categoria removida.'); setRevision(value => value + 1) }
+    catch (requestError) { setError(requestError.message) }
+  }
+
+  async function saveProduct(event) {
+    event.preventDefault()
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const data = { ...productForm, categoryId: Number(productForm.categoryId), price: productForm.price.trim(), durationDays: productForm.durationDays || null }
+      await send(editingProduct ? `/v1/site/admin/store/products/${editingProduct}` : '/v1/site/admin/store/products', editingProduct ? 'PATCH' : 'POST', data)
+      setEditingProduct(null)
+      setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true })
+      setNotice(editingProduct ? 'Produto atualizado.' : 'Produto criado.')
+      setRevision(value => value + 1)
+    } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+
+  function editProduct(product) {
+    setEditingProduct(product.id)
+    setProductForm({
+      name: product.name, description: product.description, categoryId: String(product.categoryId),
+      price: (product.priceCents / 100).toFixed(2), kind: product.kind, vipGroup: product.vipGroup || '',
+      durationDays: product.durationDays || '', productCode: product.productCode || '', active: Boolean(product.active),
+    })
+  }
+
+  async function disableProduct(product) {
+    if (!window.confirm(`Desativar ${product.name}? O histórico de pedidos será preservado.`)) return
+    setError(''); setNotice('')
+    try { await send(`/v1/site/admin/store/products/${product.id}`, 'DELETE'); setNotice('Produto desativado.'); setRevision(value => value + 1) }
+    catch (requestError) { setError(requestError.message) }
+  }
+
+  return <div className="admin-workspace store-editor">
+    <div className="admin-toolbar"><div><strong>Catálogo da loja</strong><small>Gerencie categorias, ofertas e disponibilidade.</small></div><button className="refresh-button" onClick={() => setEditorMode(value => !value)}>{editorMode ? 'Sair do modo editor' : <><Pencil size={14} /> Ativar modo editor</>}</button></div>
+    {error && <p className="login-error" role="alert">{error}</p>}{notice && <p className="admin-notice" role="status">{notice}</p>}
+    {loading ? <p className="store-status">Carregando catálogo…</p> : <>
+      {editorMode && <>
+        <section className="store-admin-section"><h2>Categorias</h2>
+          <form className="store-category-form" onSubmit={saveCategory}><label>{categoryForm.id ? 'Editar categoria' : 'Nova categoria'}<input required minLength={2} maxLength={40} value={categoryForm.name} onChange={event => setCategoryForm(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: VIPs" /></label><button className="button button-primary" disabled={busy}>{categoryForm.id ? 'Salvar' : 'Criar'} <Save size={15} /></button>{categoryForm.id && <button className="admin-back" type="button" onClick={() => setCategoryForm({ id: null, name: '' })}>Cancelar</button>}</form>
+          <div className="store-category-list">{catalog.categories.map(item => <article key={item.id}><strong>{item.name}</strong><div><button className="refresh-button" onClick={() => setCategoryForm({ id: item.id, name: item.name })} aria-label={`Editar ${item.name}`} title="Editar categoria"><Pencil size={14} /></button><button className="admin-dismiss" onClick={() => deleteCategory(item)} aria-label={`Remover ${item.name}`} title="Remover categoria"><Trash2 size={15} /></button></div></article>)}{catalog.categories.length === 0 && <p className="admin-empty">Crie uma categoria para começar.</p>}</div>
+        </section>
+        <section className="store-admin-section"><h2>{editingProduct ? 'Editar produto' : 'Novo produto'}</h2>
+          <form className="store-product-form" onSubmit={saveProduct}>
+            <label>Nome<input required minLength={2} maxLength={80} value={productForm.name} onChange={event => setProductForm(current => ({ ...current, name: event.target.value }))} /></label>
+            <label>Categoria<select required disabled={!catalog.categories.length} value={productForm.categoryId} onChange={event => setProductForm(current => ({ ...current, categoryId: event.target.value }))}><option value="">Selecione</option>{catalog.categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label>Preço (R$)<input required type="number" min="1" max="1000000" step="0.01" value={productForm.price} onChange={event => setProductForm(current => ({ ...current, price: event.target.value }))} /></label>
+            <label>Tipo<select value={productForm.kind} onChange={event => setProductForm(current => ({ ...current, kind: event.target.value }))}><option value="vip">VIP</option><option value="product">Outro produto</option></select></label>
+            {productForm.kind === 'vip' ? <><label>Grupo LuckPerms<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={productForm.vipGroup} onChange={event => setProductForm(current => ({ ...current, vipGroup: event.target.value }))} /></label><label>Duração em dias<input type="number" min="1" max="3650" placeholder="Vazio = permanente" value={productForm.durationDays} onChange={event => setProductForm(current => ({ ...current, durationDays: event.target.value }))} /></label></> : <label>Código para o plugin<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={productForm.productCode} onChange={event => setProductForm(current => ({ ...current, productCode: event.target.value }))} /></label>}
+            <label className="store-description-label">Descrição<textarea maxLength={1000} rows={3} value={productForm.description} onChange={event => setProductForm(current => ({ ...current, description: event.target.value }))} /></label>
+            <label className="store-active-label"><input type="checkbox" checked={productForm.active} onChange={event => setProductForm(current => ({ ...current, active: event.target.checked }))} /> Produto disponível na loja</label>
+            <div className="store-product-form-actions"><button className="button button-primary" disabled={busy || !catalog.categories.length}>{busy ? 'Salvando…' : editingProduct ? 'Salvar produto' : 'Criar produto'} <Save size={15} /></button>{editingProduct && <button type="button" className="admin-back" onClick={() => { setEditingProduct(null); setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true }) }}>Cancelar edição</button>}</div>
+          </form>
+        </section>
+      </>}
+      <section className="store-admin-section"><h2>Produtos cadastrados</h2><div className="store-admin-products">{catalog.products.map(item => <article className={!item.active ? 'disabled' : ''} key={item.id}><div><strong>{item.name}</strong><small>{item.category} · {item.kind === 'vip' ? `VIP · ${item.vipGroup}` : `Produto · ${item.productCode}`} · {(item.priceCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</small></div><span>{item.active ? 'Ativo' : 'Desativado'}</span>{editorMode && <div><button className="refresh-button" onClick={() => editProduct(item)} aria-label={`Editar ${item.name}`} title="Editar produto"><Pencil size={14} /></button>{item.active && <button className="admin-dismiss" onClick={() => disableProduct(item)} aria-label={`Desativar ${item.name}`} title="Desativar produto"><Trash2 size={15} /></button>}</div>}</article>)}{catalog.products.length === 0 && <p className="admin-empty">Nenhum produto cadastrado.</p>}</div></section>
+    </>}
+  </div>
 }
 
 function adminError(code) {

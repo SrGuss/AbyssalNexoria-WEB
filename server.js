@@ -16,6 +16,8 @@ async function proxy(request, response, pathname, search) {
   for await (const chunk of request) { chunks.push(chunk); if (Buffer.concat(chunks).length > 64_000) { response.writeHead(413); return response.end() } }
   const headers = { 'content-type': request.headers['content-type'] || 'application/json', 'x-forwarded-for': [request.headers['x-forwarded-for'], request.socket.remoteAddress].filter(Boolean).join(', ') }
   if (request.headers.cookie) headers.cookie = request.headers.cookie
+  if (request.headers['x-signature']) headers['x-signature'] = request.headers['x-signature']
+  if (request.headers['x-request-id']) headers['x-request-id'] = request.headers['x-request-id']
   try {
     const upstream = await fetch(API_URL + target + search, { method: request.method, headers, body: ['GET', 'HEAD'].includes(request.method) ? undefined : Buffer.concat(chunks), signal: AbortSignal.timeout(10000) })
     const out = { 'Content-Type': upstream.headers.get('content-type') || 'application/json', 'Cache-Control': 'no-store' }

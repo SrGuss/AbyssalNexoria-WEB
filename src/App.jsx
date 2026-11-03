@@ -5,7 +5,7 @@ import {
   MapPin, Clock3, Coins, Backpack
 } from 'lucide-react'
 
-const SERVER_IP = 'play.abyssalnexoria.com'
+const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
 const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21.8/items/'
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`

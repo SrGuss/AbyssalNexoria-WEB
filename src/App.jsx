@@ -191,7 +191,7 @@ function App() {
                 {copied ? <Check size={17} /> : <Copy size={17} />}
               </button>
             </div>
-            <p className="demo-note">Endereço ilustrativo — substitua pelo IP real antes de publicar.</p>
+            <p className="demo-note">Caso não consiga conectar, chame um administrador.</p>
           </div>
           <div className="hero-art" aria-label="Ilustração abstrata de um cristal mágico">
             <div className="orbit orbit-a" />

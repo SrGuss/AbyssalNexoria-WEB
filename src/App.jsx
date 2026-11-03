@@ -81,7 +81,7 @@ function App() {
 
     icon.rel = "icon";
     icon.type = "image/png";
-    icon.href = "https://abyssalnexoria-api.squareweb.app/src/logo_server/logo.png";
+    icon.href = "public/favicon.png";
 
     if (!favicon) {
       document.head.appendChild(icon);

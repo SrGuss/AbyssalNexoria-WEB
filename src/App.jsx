@@ -75,17 +75,19 @@ function App() {
   const [page, setPage] = useState(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : 'home')
 
   useEffect(() => {
-    const favicon = document.querySelector("link[rel~='icon']");
+    // Remove os favicons anteriores
+    document.querySelectorAll('link[rel*="icon"]').forEach((icon) => {
+      icon.remove();
+    });
 
-    const icon = favicon || document.createElement("link");
+    // Define o favicon do Abyssal Nexoria
+    const favicon = document.createElement("link");
 
-    icon.rel = "icon";
-    icon.type = "image/png";
-    icon.href = "public/favicon.png";
+    favicon.rel = "icon";
+    favicon.type = "image/png";
+    favicon.href = "/favicon.png?v=2";
 
-    if (!favicon) {
-      document.head.appendChild(icon);
-    }
+    document.head.appendChild(favicon);
   }, []);
 
   useEffect(() => {

@@ -206,3 +206,6 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
   .button { width: 100%; }
   .account-heading { align-items: start; flex-direction: column; }.account-grid { grid-template-columns: 1fr; }.login-card { padding: 28px 22px; }
 }
+.inventory-item-fallback { position: absolute; inset: 12%; display: grid; place-items: center; border-radius: 3px; color: #fff; background: linear-gradient(135deg, #625b70, #393342); font: 800 9px/1 Arial, sans-serif; text-transform: uppercase; }
+.inventory-slot > .minecraft-item { z-index: 1; width: auto; height: auto; object-fit: contain; }
+.inventory-slot > strong { z-index: 2; }

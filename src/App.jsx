@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 
 const SERVER_IP = 'play.abyssalnexoria.com'
+const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/1.21.8/items/'
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
@@ -325,10 +326,12 @@ function InventoryGrid({ items, order }) {
 
 function InventorySlot({ item }) {
   if (!item) return <div className="inventory-slot" title="Slot vazio" />
-  const label = item.name || String(item.type || '?').replace(/_/g, ' ')
-  const hue = [...String(item.type)].reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360
+  const type = String(item.type || '').replace(/^minecraft:/, '').toLowerCase()
+  const label = item.name || type.replace(/_/g, ' ')
+  const icon = /^[a-z0-9_]+$/.test(type) ? `${ITEM_ICON_BASE}${type}.png` : null
   return <div className="inventory-slot" title={`${label}${item.amount > 1 ? ` (${item.amount})` : ''}`}>
-    <span style={{ position: 'absolute', inset: '12%', display: 'grid', placeItems: 'center', borderRadius: 3, background: `hsl(${hue} 45% 38%)`, color: '#fff', font: '800 9px/1 Arial, sans-serif', textTransform: 'uppercase' }}>{String(item.type).replace(/_/g, ' ').slice(0, 2)}</span>
+    <span className="inventory-item-fallback" aria-hidden="true">{type.slice(0, 2) || '?'}</span>
+    {icon && <img className="minecraft-item" src={icon} alt={label} loading="lazy" decoding="async" draggable="false" onError={event => { event.currentTarget.style.display = 'none' }} />}
     {item.amount > 1 && <strong>{item.amount}</strong>}
   </div>
 }

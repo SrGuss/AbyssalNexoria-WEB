@@ -346,6 +346,16 @@ function AdminPanel() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [form, setForm] = useState({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
+  const [tab, setTab] = useState('accounts')
+  const [accounts, setAccounts] = useState([])
+  const [roles, setRoles] = useState([])
+  const [actions, setActions] = useState([])
+  const [search, setSearch] = useState('')
+  const [reload, setReload] = useState(0)
+  const [selectedAccount, setSelectedAccount] = useState(null)
+  const [actionForm, setActionForm] = useState({ action: 'kick', reason: '', days: '', minutes: 30, roleId: '' })
+  const [roleForm, setRoleForm] = useState({ name: '', group: '' })
+  const [temporaryPassword, setTemporaryPassword] = useState('')
 
   useEffect(() => {
     let active = true
@@ -361,6 +371,23 @@ function AdminPanel() {
     }).finally(() => { if (active) setChecking(false) })
     return () => { active = false }
   }, [])
+
+  useEffect(() => {
+    if (!admin) return
+    let active = true
+    const query = encodeURIComponent(search.trim())
+    Promise.all([
+      fetch(api(`/v1/site/admin/accounts?search=${query}`), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
+      fetch(api('/v1/site/admin/roles'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
+      fetch(api('/v1/site/admin/actions'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
+    ]).then(([accountData, roleData, actionData]) => {
+      if (!active) return
+      setAccounts(accountData.accounts)
+      setRoles(roleData.roles)
+      setActions(actionData.actions)
+    }).catch(() => { if (active) setError('Não foi possível carregar os dados administrativos.') })
+    return () => { active = false }
+  }, [admin, search, reload])
 
   function update(event) {
     setForm(current => ({ ...current, [event.target.name]: event.target.value }))
@@ -418,11 +445,111 @@ function AdminPanel() {
     setForm({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
   }
 
+  async function submitAccountAction(event) {
+    event.preventDefault()
+    if (!selectedAccount) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    setTemporaryPassword('')
+    if (['ban', 'unban', 'reset_password'].includes(actionForm.action)
+      && !window.confirm(`Confirmar ${actionLabel(actionForm.action).toLowerCase()} de ${selectedAccount.nick}?`)) {
+      setBusy(false)
+      return
+    }
+    try {
+      const response = await fetch(api(`/v1/site/admin/accounts/${encodeURIComponent(selectedAccount.nick)}/actions`), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actionForm),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      if (data.temporaryPassword) {
+        setTemporaryPassword(data.temporaryPassword)
+        setNotice(`Senha temporária de ${selectedAccount.nick}; ela só será exibida agora.`)
+      } else {
+        setNotice(`${actionLabel(actionForm.action)} enviado para a fila do servidor.`)
+      }
+      setReload(value => value + 1)
+      if (!data.temporaryPassword) setSelectedAccount(null)
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível executar a ação.')
+    } finally { setBusy(false) }
+  }
+
+  async function createRole(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/roles'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roleForm),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      setRoleForm({ name: '', group: '' })
+      setNotice('Cargo mapeado ao grupo LuckPerms.')
+      setReload(value => value + 1)
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível salvar o cargo.')
+    } finally { setBusy(false) }
+  }
+
+  async function deleteRole(role) {
+    if (!window.confirm(`Remover o mapeamento “${role.name}”?`)) return
+    const response = await fetch(api(`/v1/site/admin/roles/${role.id}`), { method: 'DELETE', credentials: 'include' })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) return setError(adminError(data.error))
+    setNotice('Mapeamento removido.')
+    setReload(value => value + 1)
+  }
+
+  async function copyTemporaryPassword() {
+    try {
+      await navigator.clipboard.writeText(temporaryPassword)
+      setNotice('Senha temporária copiada.')
+    } catch {
+      window.prompt('Copie a senha temporária:', temporaryPassword)
+    }
+  }
+
   if (checking) return <section className="account-gate section-wrap"><span className="login-mark"><LockKeyhole size={24} /></span><p>Verificando acesso administrativo…</p></section>
 
   if (admin) return <section className="admin-session section-wrap">
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>Sessão administrativa ativa</small></div><span className="admin-session-status">Autenticado</span></div>
+    <nav className="admin-tabs" aria-label="Seções administrativas">
+      {[['accounts', 'Contas'], ['roles', 'Cargos'], ['actions', 'Atividades']].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+    </nav>
+    {error && <p className="login-error" role="alert">{error}</p>}
+    {notice && <p className="admin-notice" role="status">{notice}</p>}
+    {temporaryPassword && <div className="admin-temporary-password"><code>{temporaryPassword}</code><button className="refresh-button" onClick={copyTemporaryPassword}><Copy size={14} /> Copiar</button><button className="admin-dismiss" onClick={() => setTemporaryPassword('')} aria-label="Ocultar senha"><X size={15} /></button></div>}
+    {tab === 'accounts' && <div className="admin-workspace">
+      <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
+      <div className="admin-account-list">{accounts.map(account => <article className="admin-account-row" key={account.id}>
+        <div><strong>{account.nick}</strong><small>{account.profile?.online ? 'Online' : 'Offline'} · {account.profile?.level != null ? `Nível ${account.profile.level}` : 'Sem perfil sincronizado'}</small></div>
+        <div><small>{account.uuid || 'UUID pendente'}</small><small>{account.updatedAt ? `Sincronizado ${account.updatedAt}` : 'Nunca sincronizado'}</small></div>
+        <button className="refresh-button" onClick={() => { setSelectedAccount(account); setActionForm({ action: 'kick', reason: '', days: '', minutes: 30, roleId: roles[0]?.id || '' }); setTemporaryPassword('') }}>Gerenciar</button>
+      </article>)}{accounts.length === 0 && <p className="admin-empty">Nenhuma conta encontrada.</p>}</div>
+      {selectedAccount && <form className="admin-action-form" onSubmit={submitAccountAction}>
+        <div className="admin-form-heading"><div><span>AÇÃO PARA</span><strong>{selectedAccount.nick}</strong></div><button type="button" className="admin-dismiss" onClick={() => setSelectedAccount(null)} aria-label="Fechar"><X size={16} /></button></div>
+        <label>Ação<select value={actionForm.action} onChange={event => setActionForm(current => ({ ...current, action: event.target.value }))}>
+          {['kick', 'ban', 'unban', 'mute', 'unmute', 'warn', 'reset_password', 'set_role'].map(value => <option key={value} value={value}>{actionLabel(value)}</option>)}
+        </select></label>
+        {['ban', 'kick', 'mute', 'warn'].includes(actionForm.action) && <label>Motivo<textarea required maxLength={200} value={actionForm.reason} onChange={event => setActionForm(current => ({ ...current, reason: event.target.value }))} rows={2} /></label>}
+        {actionForm.action === 'ban' && <label>Duração em dias <small>(vazio = permanente)</small><input type="number" min="1" max="3650" value={actionForm.days} onChange={event => setActionForm(current => ({ ...current, days: event.target.value }))} /></label>}
+        {actionForm.action === 'mute' && <label>Duração em minutos<input type="number" required min="1" max="525600" value={actionForm.minutes} onChange={event => setActionForm(current => ({ ...current, minutes: event.target.value }))} /></label>}
+        {actionForm.action === 'set_role' && <label>Cargo<select required value={actionForm.roleId} onChange={event => setActionForm(current => ({ ...current, roleId: event.target.value }))}><option value="">Selecione</option>{roles.map(role => <option key={role.id} value={role.id}>{role.name} · {role.group}</option>)}</select></label>}
+        <div className="admin-form-actions"><button className="button button-primary" type="submit" disabled={busy || (actionForm.action === 'set_role' && roles.length === 0)}>{busy ? 'Enviando…' : actionLabel(actionForm.action)} <ChevronRight size={17} /></button><button type="button" className="admin-back" onClick={() => setSelectedAccount(null)}>Cancelar</button></div>
+      </form>}
+    </div>}
+    {tab === 'roles' && <div className="admin-workspace">
+      <form className="admin-role-form" onSubmit={createRole}><label>Nome do cargo<input required minLength={2} maxLength={32} value={roleForm.name} onChange={event => setRoleForm(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: Guardião" /></label><label>Grupo LuckPerms<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={roleForm.group} onChange={event => setRoleForm(current => ({ ...current, group: event.target.value }))} placeholder="Ex.: guardiao" /></label><button className="button button-primary" type="submit" disabled={busy}>Adicionar cargo <ChevronRight size={17} /></button></form>
+      <div className="admin-role-list">{roles.map(role => <article className="admin-role-row" key={role.id}><div><strong>{role.name}</strong><small>LuckPerms</small></div><code>{role.group}</code><button className="admin-dismiss" onClick={() => deleteRole(role)} aria-label={`Remover ${role.name}`} title="Remover mapeamento"><X size={16} /></button></article>)}{roles.length === 0 && <p className="admin-empty">Nenhum cargo mapeado ainda.</p>}</div>
+    </div>}
+    {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {action.createdAt}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
   </section>
 
   return <section className="admin-gate section-wrap">
@@ -455,7 +582,16 @@ function adminError(code) {
     admin_already_registered: 'O acesso administrativo já foi configurado.',
     admin_not_registered: 'Configure o acesso administrativo primeiro.',
     invalid_admin_password: 'A senha precisa ter 12 caracteres e ser diferente da senha do servidor.',
+    invalid_role: 'Nome ou grupo LuckPerms inválido.',
+    role_exists: 'Esse nome ou grupo LuckPerms já está mapeado.',
+    account_not_found: 'Conta não encontrada.',
+    invalid_reason: 'Informe um motivo com até 200 caracteres.',
+    invalid_duration: 'Duração inválida.',
   })[code] || 'Não foi possível completar a solicitação.'
+}
+
+function actionLabel(action) {
+  return ({ kick: 'Expulsar', ban: 'Banir', unban: 'Desbanir', mute: 'Silenciar', unmute: 'Remover mute', warn: 'Avisar', reset_password: 'Redefinir senha', set_role: 'Definir cargo' })[action] || action
 }
 
 export default App

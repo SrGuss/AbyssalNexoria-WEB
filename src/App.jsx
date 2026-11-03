@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
@@ -11,6 +11,18 @@ const ITEM_ICON_BASE = 'https://raw.githubusercontent.com/PrismarineJS/minecraft
 const MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY || ''
 if (MP_PUBLIC_KEY) initMercadoPago(MP_PUBLIC_KEY, { locale: 'pt-BR' })
 const MP_PAYMENT_CUSTOMIZATION = { paymentMethods: { creditCard: 'all', debitCard: 'all', bankTransfer: 'all', maxInstallments: 6 } }
+
+function isValidCpf(value) {
+  const digits = String(value || '').replace(/\D/g, '')
+  if (!/^\d{11}$/.test(digits) || /^([0-9])\1{10}$/.test(digits)) return false
+  const checkDigit = length => {
+    let sum = 0
+    for (let index = 0; index < length; index++) sum += Number(digits[index]) * (length + 1 - index)
+    const remainder = (sum * 10) % 11
+    return remainder === 10 ? 0 : remainder
+  }
+  return checkDigit(9) === Number(digits[9]) && checkDigit(10) === Number(digits[10])
+}
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
@@ -261,6 +273,8 @@ function StorePage({ player, onLogin }) {
   const [paymentResult, setPaymentResult] = useState(null)
   const [pendingOrderId, setPendingOrderId] = useState('')
   const [error, setError] = useState('')
+  const [payerCpf, setPayerCpf] = useState('')
+  const payerCpfRef = useRef('')
 
   useEffect(() => {
     let active = true
@@ -323,11 +337,17 @@ function StorePage({ player, onLogin }) {
     setCheckoutBusy(true)
     setError('')
     try {
+      let payment = formData
+      if (formData.payment_method_id === 'pix') {
+        const cpf = payerCpfRef.current
+        if (!isValidCpf(cpf)) throw new Error('Informe um CPF válido do titular para pagar com Pix.')
+        payment = { ...formData, payer: { ...formData.payer, identification: { type: 'CPF', number: cpf } } }
+      }
       const response = await fetch(api('/v1/site/store/payments'), {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]) })),
-          payment: formData,
+          payment,
         }),
       })
       const data = await response.json().catch(() => ({}))
@@ -339,6 +359,7 @@ function StorePage({ player, onLogin }) {
           products_unavailable: 'Algum produto mudou. Atualize a loja e revise o carrinho.',
           invalid_payment_data: 'Confira os dados do pagador e tente novamente.',
           pix_identification_required: 'Para pagar com Pix, informe CPF ou CNPJ nos dados solicitados pelo Mercado Pago.',
+          pix_cpf_invalid: 'Informe um CPF válido do titular para pagar com Pix.',
           payment_rejected: 'O pagamento não foi autorizado. Confira os dados ou escolha outro método.',
           payment_verification_failed: 'Não foi possível confirmar o valor do pagamento. Entre em contato com o suporte.',
           checkout_unavailable: 'O Mercado Pago está indisponível. Tente novamente.',
@@ -407,6 +428,7 @@ function StorePage({ player, onLogin }) {
             {paymentResult.ticketUrl && <a className="button button-ghost" href={paymentResult.ticketUrl} target="_blank" rel="noreferrer">Abrir boleto</a>}
           </div> : paymentResult?.status === 'failed' ? <div className="store-payment-state failed"><X size={19} /><div><strong>Pagamento não concluído</strong><small>Tente iniciar outro pagamento.</small></div></div> : MP_PUBLIC_KEY ? <>
             <p className="store-payment-hint">Informe os dados solicitados pelo Mercado Pago.</p>
+            <label className="store-payer-cpf">CPF do titular (obrigatório para Pix)<input inputMode="numeric" autoComplete="off" maxLength={11} placeholder="11 números" value={payerCpf} onChange={event => { const value = event.target.value.replace(/\D/g, '').slice(0, 11); payerCpfRef.current = value; setPayerCpf(value) }} /></label>
             <Payment
               initialization={paymentInitialization}
               customization={MP_PAYMENT_CUSTOMIZATION}

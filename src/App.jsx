@@ -27,6 +27,17 @@ function isValidCpf(value) {
 const api = path => `/api${path}`
 const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+const brasiliaDate = value => {
+  if (!value) return null
+  const raw = String(value)
+  const instant = new Date(typeof value === 'number' || /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? value : `${raw.replace(' ', 'T')}Z`)
+  return Number.isNaN(instant.getTime()) ? null : instant
+}
+const formatSiteDateTime = value => {
+  const instant = brasiliaDate(value)
+  return instant ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(instant) : '—'
+}
+const formatCountdown = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
 
 function loadMe() {
   return fetch(api('/v1/site/me'), { credentials: 'include' })
@@ -278,6 +289,7 @@ function StorePage({ player, onLogin }) {
   const [verificationBusy, setVerificationBusy] = useState(false)
   const [verificationMessage, setVerificationMessage] = useState('')
   const verificationBusyRef = useRef(false)
+  const [siteNow, setSiteNow] = useState(Date.now())
 
   useEffect(() => {
     let active = true
@@ -291,6 +303,16 @@ function StorePage({ player, onLogin }) {
   useEffect(() => {
     localStorage.setItem('nexoria-store-cart', JSON.stringify(cart))
   }, [cart])
+
+  useEffect(() => {
+    if (!paymentResult?.expiresAt || !['pending', 'in_process'].includes(paymentResult.status)) return
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now()
+      setSiteNow(currentTime)
+      if (currentTime >= Number(paymentResult.expiresAt)) setPendingOrderId('')
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [paymentResult?.expiresAt, paymentResult?.status])
 
   const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
   const cartItems = useMemo(() => catalog.products.filter(product => Number(cart[product.id]) > 0), [catalog.products, cart])
@@ -441,7 +463,7 @@ function StorePage({ player, onLogin }) {
         <small className="store-payment-note">Pagamento processado com segurança pelo Mercado Pago.</small>
         {checkoutOpen && <section className="store-payment-form" aria-label="Pagamento transparente">
           <div className="store-payment-heading"><strong>Pagamento</strong><button className="admin-dismiss" onClick={() => { setCheckoutOpen(false); setPaymentResult(null); setError('') }} aria-label="Fechar pagamento"><X size={15} /></button></div>
-          {paymentResult?.status === 'approved' ? <div className="store-payment-state success"><Check size={19} /><div><strong>Pagamento aprovado</strong><small>Seu pedido foi confirmado.</small></div></div> : paymentResult?.status === 'pending' || paymentResult?.status === 'in_process' ? <div className="store-payment-state"><Clock3 size={19} /><div><strong>Aguardando confirmação</strong><small>{paymentResult.pixQrCode ? 'Pague com o Pix para concluir o pedido.' : 'Estamos aguardando a confirmação do Mercado Pago.'}</small></div>
+          {paymentResult?.status === 'approved' ? <div className="store-payment-state success"><Check size={19} /><div><strong>Pagamento aprovado</strong><small>Seu pedido foi confirmado.</small></div></div> : paymentResult?.expiresAt && Number(paymentResult.expiresAt) <= siteNow ? <div className="store-payment-state failed"><Clock3 size={19} /><div><strong>QR Code Pix expirado</strong><small>Este código não aceita mais pagamentos. Gere um novo para continuar.</small></div><button className="button button-primary store-new-pix" onClick={() => { setPaymentResult(null); setPendingOrderId(''); setVerificationMessage('') }}>Gerar novo QR Code <RefreshCw size={15} /></button></div> : paymentResult?.status === 'pending' || paymentResult?.status === 'in_process' ? <div className="store-payment-state"><Clock3 size={19} /><div><strong>Aguardando confirmação</strong><small>{paymentResult.pixQrCode ? `Pague com o Pix para concluir o pedido. Expira em ${formatCountdown(Math.max(0, Math.ceil((Number(paymentResult.expiresAt) - siteNow) / 1000)))}` : 'Estamos aguardando a confirmação do Mercado Pago.'}</small></div>
             {paymentResult.pixQrCodeBase64 && <img className="store-pix-qr" src={`data:image/png;base64,${paymentResult.pixQrCodeBase64}`} alt="QR Code Pix para pagamento" />}
             {paymentResult.pixQrCode && <label className="store-pix-code">Código Pix<input readOnly value={paymentResult.pixQrCode} onFocus={event => event.target.select()} /></label>}
             {verificationMessage && <small className="store-payment-verification-message" role="status">{verificationMessage}</small>}
@@ -466,7 +488,7 @@ function StorePage({ player, onLogin }) {
 
 function PlayerPanel({ player, onRefresh }) {
   const [busy, setBusy] = useState(false)
-  const date = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Sem dados'
+  const date = value => value ? formatSiteDateTime(value) : 'Sem dados'
   const num = value => Number.isFinite(value) ? value.toLocaleString('pt-BR') : null
   const loc = player.lastLocation
   const synced = !!(player.lastSeenAt || player.lastLoginAt)
@@ -769,7 +791,7 @@ function AdminPanel() {
       <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
       <div className="admin-account-list">{accounts.map(account => <article className="admin-account-row" key={account.id}>
         <div><strong>{account.nick}</strong><small>{account.profile?.online ? 'Online' : 'Offline'} · {account.profile?.level != null ? `Nível ${account.profile.level}` : 'Sem perfil sincronizado'}</small></div>
-        <div><small>{account.uuid || 'UUID pendente'}</small><small>{account.updatedAt ? `Sincronizado ${account.updatedAt}` : 'Nunca sincronizado'}</small></div>
+        <div><small>{account.uuid || 'UUID pendente'}</small><small>{account.updatedAt ? `Sincronizado ${formatSiteDateTime(account.updatedAt)}` : 'Nunca sincronizado'}</small></div>
         <button className="refresh-button" onClick={() => { setSelectedAccount(account); setActionForm({ action: 'kick', reason: '', days: '', minutes: 30, roleId: roles[0]?.id || '' }); setTemporaryPassword('') }}>Gerenciar</button>
       </article>)}{accounts.length === 0 && <p className="admin-empty">Nenhuma conta encontrada.</p>}</div>
       {selectedAccount && <form className="admin-action-form" onSubmit={submitAccountAction}>
@@ -790,7 +812,7 @@ function AdminPanel() {
       <form className="admin-role-form" onSubmit={createRole}><label>Nome do cargo<input required minLength={2} maxLength={32} value={roleForm.name} onChange={event => setRoleForm(current => ({ ...current, name: event.target.value }))} placeholder="Ex.: Guardião" /></label><label>Grupo LuckPerms<select required disabled={!luckPermsCatalog.available} value={roleForm.group} onChange={event => setRoleForm(current => ({ ...current, group: event.target.value }))}><option value="">Selecione um grupo</option>{roleForm.group && !luckPermsCatalog.groups.includes(roleForm.group) && <option value={roleForm.group}>{roleForm.group} · grupo não encontrado</option>}{luckPermsCatalog.groups.filter(group => group.toLowerCase() !== 'default').map(group => <option key={group} value={group}>{group}</option>)}</select></label><div className="admin-role-form-actions"><button className="button button-primary" type="submit" disabled={busy || !luckPermsCatalog.available || !roleForm.group}>{busy ? 'Salvando…' : editingRoleId ? 'Salvar mapping' : 'Adicionar cargo'} <ChevronRight size={17} /></button>{editingRoleId && <button className="admin-back" type="button" onClick={() => { setEditingRoleId(null); setRoleForm({ name: '', group: '' }) }}>Cancelar edição</button>}</div></form>
       <div className="admin-role-list">{roles.map(role => <article className="admin-role-row" key={role.id}><div><strong>{role.name}</strong><small>{luckPermsCatalog.groups.includes(role.group) ? 'Grupo detectado' : 'Grupo não encontrado no LuckPerms'}</small></div><code>{role.group}</code><div className="admin-role-actions"><button className="refresh-button" onClick={() => editRole(role)}>Editar</button><button className="admin-dismiss" onClick={() => deleteRole(role)} aria-label={`Remover ${role.name}`} title="Remover mapeamento"><X size={16} /></button></div></article>)}{roles.length === 0 && <p className="admin-empty">Nenhum cargo mapeado ainda.</p>}</div>
     </div>}
-    {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {action.createdAt}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
+    {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {formatSiteDateTime(action.createdAt)}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
     {tab === 'staff' && admin.role === 'owner' && <div className="admin-workspace">
       <form className="admin-role-form" onSubmit={inviteStaff}><label>Nick cadastrado no servidor<input required pattern="\.?[A-Za-z0-9_]{3,16}" value={staffForm.nick} onChange={event => setStaffForm(current => ({ ...current, nick: event.target.value }))} placeholder="Nick exato da conta" /></label><label>Papel<select value={staffForm.role} onChange={event => setStaffForm(current => ({ ...current, role: event.target.value }))}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select></label><button className="button button-primary" type="submit" disabled={busy}>Convidar <ChevronRight size={17} /></button></form>
       <div className="admin-staff-list">{staff.map(member => <article className="admin-staff-row" key={member.nick}><div><strong>{member.nick}</strong><small>{member.configured ? 'Acesso configurado' : 'Aguardando primeiro acesso'}</small></div><select aria-label={`Papel de ${member.nick}`} value={member.role} onChange={event => changeStaffRole(member, event.target.value)}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select><button className="admin-dismiss" onClick={() => removeStaff(member)} aria-label={`Revogar acesso de ${member.nick}`} title="Revogar acesso"><X size={16} /></button></article>)}{staff.length === 0 && <p className="admin-empty">Nenhum membro convidado.</p>}</div>
@@ -828,6 +850,27 @@ function StoreTransactions({ admin, access, onAccessChange }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [revision, setRevision] = useState(0)
+  const [siteNow, setSiteNow] = useState(Date.now())
+  const hasExpiringOrders = orders.some(order => order.status === 'pending' && Number(order.expiresAt) > 0)
+
+  useEffect(() => {
+    if (!hasExpiringOrders) return
+    const timer = window.setInterval(() => setSiteNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [hasExpiringOrders])
+
+  useEffect(() => {
+    if (!hasExpiringOrders) return
+    let active = true
+    const refresh = async () => {
+      const response = await fetch(api(`/v1/site/admin/store/transactions?status=${filter}`), { credentials: 'include' }).catch(() => null)
+      if (!response?.ok) return
+      const data = await response.json().catch(() => null)
+      if (active && data?.orders) setOrders(data.orders)
+    }
+    const timer = window.setInterval(refresh, 15000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [hasExpiringOrders, filter])
   const isOwner = admin.role === 'owner'
 
   useEffect(() => {
@@ -842,7 +885,7 @@ function StoreTransactions({ admin, access, onAccessChange }) {
   }, [filter, revision])
 
   const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-  const date = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(`${value.replace(' ', 'T')}Z`)) : '—'
+  const date = value => formatSiteDateTime(value)
   const statusLabel = status => ({ pending: 'Iniciada · pendente', paid: 'Finalizada · paga', failed: 'Não concluída' })[status] || status
   const deliveryLabel = status => ({ delivered: 'Entregue', partial: 'Parcial', pending: 'Aguardando entrega', not_paid: 'Não paga', failed: 'Falha na entrega' })[status] || status
   const paymentLabel = order => {
@@ -893,7 +936,7 @@ function StoreTransactions({ admin, access, onAccessChange }) {
       <td><span>{date(order.createdAt)}</span><small>Atualizado {date(order.updatedAt)}</small></td>
       <td><strong>{money(order.amountCents)}</strong></td>
       <td><span>{paymentLabel(order)}</span><small>{order.paymentId ? `ID ${order.paymentId}` : 'Sem ID de pagamento'}</small></td>
-      <td><span className={`transaction-status ${order.status}`}>{statusLabel(order.status)}</span></td>
+      <td><span className={`transaction-status ${order.status}`}>{statusLabel(order.status)}</span>{order.status === 'pending' && Number(order.expiresAt) > 0 && <small className={`transaction-expiry ${Number(order.expiresAt) <= siteNow ? 'expired' : ''}`}>{Number(order.expiresAt) <= siteNow ? 'Expirado; removendo…' : `QR expira em ${formatCountdown(Math.ceil((Number(order.expiresAt) - siteNow) / 1000))}`}</small>}</td>
       <td><span className={`transaction-delivery ${order.deliveryStatus}`}>{deliveryLabel(order.deliveryStatus)}</span></td>
       <td>{order.items.map(item => <div className="transaction-item" key={`${order.id}-${item.productId}`}><span>{item.name} × {item.quantity}</span><small>{deliveryLabel(item.deliveryStatus)} · {money(item.priceCents * item.quantity)}</small></div>)}</td>
     </tr>)}</tbody></table></div> : <p className="admin-empty">Nenhuma transação neste filtro.</p>}

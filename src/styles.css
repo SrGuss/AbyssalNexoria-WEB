@@ -311,6 +311,7 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .store-pix-code { grid-column: 1 / -1; display: grid; gap: 6px; color: #bcb2cd; font-size: 10px; }
 .store-pix-code input { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 5px; color: #e8e1f3; background: #0c0a14; font: 10px/1.5 'DM Sans', sans-serif; }
 .store-payment-state > .button { grid-column: 1 / -1; margin-top: 5px; }
+.store-new-pix { grid-column: 1 / -1; width: 100%; margin-top: 5px; }
 .store-status { padding: 18px 0; color: #a79db7; font-size: 12px; }
 .store-empty { min-height: 250px; display: grid; align-content: center; justify-items: center; padding: 30px; border: 1px dashed rgba(190,170,255,.2); border-radius: 8px; color: #aaa2be; text-align: center; }
 .store-empty svg { margin-bottom: 12px; color: #8fae9c; }

@@ -352,15 +352,15 @@ function StorePage({ player, onLogin }) {
     setError('')
   }
 
-  const submitPayment = useCallback(async ({ formData }) => {
+  const submitPayment = useCallback(async ({ formData, paymentType }) => {
     setCheckoutBusy(true)
     setError('')
     try {
-      let payment = formData
+      let payment = { ...formData, checkout_payment_type: paymentType }
       if (formData.payment_method_id === 'pix') {
         const cpf = payerCpfRef.current
         if (!isValidCpf(cpf)) throw new Error('Informe um CPF válido do titular para pagar com Pix.')
-        payment = { ...formData, payer: { ...formData.payer, identification: { type: 'CPF', number: cpf } } }
+        payment = { ...payment, payer: { ...formData.payer, identification: { type: 'CPF', number: cpf } } }
       }
       const response = await fetch(api('/v1/site/store/payments'), {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
@@ -516,6 +516,7 @@ function AdminPanel() {
   const [notice, setNotice] = useState('')
   const [form, setForm] = useState({ nick: '', serverPassword: '', token: '', adminPassword: '', confirmation: '' })
   const [tab, setTab] = useState('accounts')
+  const [transactionAccess, setTransactionAccess] = useState({ canView: false, roles: [] })
   const [accounts, setAccounts] = useState([])
   const [roles, setRoles] = useState([])
   const [luckPermsCatalog, setLuckPermsCatalog] = useState({ available: false, syncedAt: null, groups: [] })
@@ -565,6 +566,16 @@ function AdminPanel() {
     }).catch(() => { if (active) setError('Não foi possível carregar os dados administrativos.') })
     return () => { active = false }
   }, [admin, search, reload])
+
+  useEffect(() => {
+    if (!admin) return
+    let active = true
+    fetch(api('/v1/site/admin/store/transactions/access'), { credentials: 'include' })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => { if (active) setTransactionAccess(data) })
+      .catch(() => { if (active) setTransactionAccess({ canView: admin.role === 'owner', roles: [] }) })
+    return () => { active = false }
+  }, [admin])
 
   function update(event) {
     setForm(current => ({ ...current, [event.target.name]: event.target.value }))
@@ -747,11 +758,12 @@ function AdminPanel() {
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
     {temporaryPassword && <div className="admin-temporary-password"><code>{temporaryPassword}</code><button className="refresh-button" onClick={copyTemporaryPassword}><Copy size={14} /> Copiar</button><button className="admin-dismiss" onClick={() => setTemporaryPassword('')} aria-label="Ocultar senha"><X size={15} /></button></div>}
+    {tab === 'transactions' && transactionAccess.canView && <StoreTransactions admin={admin} access={transactionAccess} onAccessChange={setTransactionAccess} />}
     {tab === 'store' && ['owner', 'admin'].includes(admin.role) && <StoreEditor />}
     {tab === 'accounts' && <div className="admin-workspace">
       <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
@@ -805,6 +817,73 @@ function AdminPanel() {
       {error && <p className="login-error" role="alert">{error}</p>}
     </div>
   </section>
+}
+
+function StoreTransactions({ admin, access, onAccessChange }) {
+  const [orders, setOrders] = useState([])
+  const [filter, setFilter] = useState('all')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [revision, setRevision] = useState(0)
+  const isOwner = admin.role === 'owner'
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    fetch(api(`/v1/site/admin/store/transactions?status=${filter}`), { credentials: 'include' })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => { if (active) setOrders(data.orders) })
+      .catch(() => { if (active) setError('Não foi possível carregar as transações.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [filter, revision])
+
+  const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const date = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(`${value.replace(' ', 'T')}Z`)) : '—'
+  const statusLabel = status => ({ pending: 'Iniciada · pendente', paid: 'Finalizada · paga', failed: 'Não concluída' })[status] || status
+  const deliveryLabel = status => ({ delivered: 'Entregue', partial: 'Parcial', pending: 'Aguardando entrega', not_paid: 'Não paga', failed: 'Falha na entrega' })[status] || status
+  const paymentLabel = order => {
+    const method = order.paymentMethodId?.toLowerCase()
+    if (method === 'pix') return 'Pix'
+    if (method) return `${order.paymentType || 'Cartão'} · ${order.paymentMethodId}`
+    return 'Não informado'
+  }
+
+  async function saveAccess(role, canView) {
+    const roles = access.roles.filter(item => item.canView).map(item => item.role)
+    const nextRoles = canView ? [...new Set([...roles, role])] : roles.filter(item => item !== role)
+    setBusy(true); setError(''); setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/store/transactions/access'), {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roles: nextRoles }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error('Não foi possível atualizar as permissões.')
+      const updated = { canView: true, roles: data.roles }
+      onAccessChange(updated)
+      setNotice('Permissões das transações atualizadas.')
+    } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
+  }
+
+  return <div className="admin-workspace transaction-workspace">
+    {isOwner && <section className="transaction-access"><div><strong>Acesso às transações</strong><small>Escolha quais papéis administrativos podem consultar dados de compras.</small></div>
+      <div className="transaction-access-options">{access.roles.map(item => <label key={item.role}><input type="checkbox" checked={item.canView} disabled={busy} onChange={event => saveAccess(item.role, event.target.checked)} />{staffRoleLabel(item.role)}</label>)}</div>
+    </section>}
+    <div className="transaction-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Todas</option><option value="pending">Iniciadas / pendentes</option><option value="paid">Finalizadas / pagas</option><option value="failed">Não concluídas</option></select></label><button className="refresh-button" onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} /> Atualizar</button></div>
+    {error && <p className="login-error" role="alert">{error}</p>}{notice && <p className="admin-notice" role="status">{notice}</p>}
+    {loading ? <p className="store-status">Carregando transações…</p> : orders.length ? <div className="transaction-table-wrap"><table className="transaction-table"><thead><tr><th>Pedido / jogador</th><th>Data e hora</th><th>Valor</th><th>Pagamento</th><th>Status</th><th>Entrega</th><th>Produtos</th></tr></thead><tbody>{orders.map(order => <tr key={order.id}>
+      <td><strong>{order.player}</strong><small title={order.id}>{order.id.slice(0, 8)}</small></td>
+      <td><span>{date(order.createdAt)}</span><small>Atualizado {date(order.updatedAt)}</small></td>
+      <td><strong>{money(order.amountCents)}</strong></td>
+      <td><span>{paymentLabel(order)}</span><small>{order.paymentId ? `ID ${order.paymentId}` : 'Sem ID de pagamento'}</small></td>
+      <td><span className={`transaction-status ${order.status}`}>{statusLabel(order.status)}</span></td>
+      <td><span className={`transaction-delivery ${order.deliveryStatus}`}>{deliveryLabel(order.deliveryStatus)}</span></td>
+      <td>{order.items.map(item => <div className="transaction-item" key={`${order.id}-${item.productId}`}><span>{item.name} × {item.quantity}</span><small>{deliveryLabel(item.deliveryStatus)} · {money(item.priceCents * item.quantity)}</small></div>)}</td>
+    </tr>)}</tbody></table></div> : <p className="admin-empty">Nenhuma transação neste filtro.</p>}
+  </div>
 }
 
 function StoreEditor() {

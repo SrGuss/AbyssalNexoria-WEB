@@ -344,6 +344,35 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .store-admin-products article small { overflow: hidden; color: #9389a5; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .store-admin-products article > span { color: #9bd5b7; font-size: 10px; }
 .store-admin-products article.disabled > span { color: #d99aa5; }
+.transaction-workspace { gap: 18px; }
+.transaction-access { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0 17px; border-bottom: 1px solid var(--line); }
+.transaction-access > div:first-child { display: grid; gap: 5px; }
+.transaction-access strong { color: #f0e9fa; font-size: 12px; }
+.transaction-access small { color: #9f94b2; font-size: 10px; line-height: 1.5; }
+.transaction-access-options { display: flex; flex-wrap: wrap; gap: 8px 17px; }
+.transaction-access-options label { display: flex; align-items: center; gap: 7px; color: #d1c7df; font-size: 10px; }
+.transaction-access-options input { accent-color: #9d83df; }
+.transaction-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.transaction-toolbar > label { display: grid; gap: 7px; color: #c6bad9; font-size: 10px; font-weight: 700; }
+.transaction-toolbar select { min-width: 220px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 6px; color: #f2ecfa; background: #171321; font: inherit; }
+.transaction-toolbar select option { color: #f2ecfa; background: #171321; }
+.transaction-toolbar > button { display: flex; align-items: center; gap: 7px; }
+.transaction-table-wrap { width: 100%; overflow-x: auto; border-top: 1px solid var(--line); }
+.transaction-table { width: 100%; min-width: 940px; border-collapse: collapse; text-align: left; }
+.transaction-table th { padding: 11px 9px; color: #9186a5; font-size: 9px; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+.transaction-table td { max-width: 250px; padding: 12px 9px; border-top: 1px solid rgba(190,170,255,.09); color: #d8d0e5; font-size: 10px; vertical-align: top; }
+.transaction-table td > strong, .transaction-table td > small, .transaction-table td > span { display: block; }
+.transaction-table td > strong { color: #f0e9fa; font-size: 11px; }
+.transaction-table td > small { max-width: 160px; margin-top: 4px; overflow: hidden; color: #9289a3; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.transaction-table td:nth-child(3) strong { white-space: nowrap; }
+.transaction-status, .transaction-delivery { width: fit-content; padding: 5px 7px; border: 1px solid rgba(190,170,255,.14); border-radius: 5px; color: #c7bed5; background: rgba(255,255,255,.025); font-size: 9px; white-space: nowrap; }
+.transaction-status.paid, .transaction-delivery.delivered { border-color: rgba(107,211,175,.22); color: #9bd8bd; background: rgba(54,164,125,.06); }
+.transaction-status.failed, .transaction-delivery.failed { border-color: rgba(219,93,116,.22); color: #e19aa8; background: rgba(167,45,76,.06); }
+.transaction-status.pending, .transaction-delivery.pending, .transaction-delivery.partial { border-color: rgba(232,189,80,.2); color: #e4ce8d; background: rgba(217,169,46,.05); }
+.transaction-item { display: grid; gap: 3px; margin-bottom: 7px; }
+.transaction-item:last-child { margin-bottom: 0; }
+.transaction-item > span { color: #e2d9ed; font-size: 10px; }
+.transaction-item > small { color: #988da8; font-size: 9px; }
 
 @media (max-width: 1000px) {
   .store-products { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -354,6 +383,9 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
   .store-heading h1 { font-size: 36px; }
   .store-layout { grid-template-columns: 1fr; }
   .store-cart { position: static; }
+  .transaction-access { align-items: flex-start; flex-direction: column; }
+  .transaction-toolbar { align-items: stretch; flex-direction: column; }
+  .transaction-toolbar select { width: 100%; }
   .store-product-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .store-product-form .store-description-label { grid-column: 1 / -1; }
 }

@@ -824,6 +824,7 @@ function StoreTransactions({ admin, access, onAccessChange }) {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
+  const [clearing, setClearing] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [revision, setRevision] = useState(0)
@@ -868,11 +869,24 @@ function StoreTransactions({ admin, access, onAccessChange }) {
     } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
   }
 
+  async function clearTransactions() {
+    const confirmed = window.confirm('Remover do histórico todas as transações pagas e não concluídas? Pedidos Pix ainda pendentes serão preservados, assim como a fila de entrega dos produtos.')
+    if (!confirmed) return
+    setClearing(true); setError(''); setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/store/transactions'), { method: 'DELETE', credentials: 'include' })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error('Não foi possível limpar as transações.')
+      setNotice(`${data.deleted} transações removidas. ${data.pendingPreserved} pedidos pendentes foram preservados.`)
+      setRevision(value => value + 1)
+    } catch (requestError) { setError(requestError.message) } finally { setClearing(false) }
+  }
+
   return <div className="admin-workspace transaction-workspace">
     {isOwner && <section className="transaction-access"><div><strong>Acesso às transações</strong><small>Escolha quais papéis administrativos podem consultar dados de compras.</small></div>
       <div className="transaction-access-options">{access.roles.map(item => <label key={item.role}><input type="checkbox" checked={item.canView} disabled={busy} onChange={event => saveAccess(item.role, event.target.checked)} />{staffRoleLabel(item.role)}</label>)}</div>
     </section>}
-    <div className="transaction-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Todas</option><option value="pending">Iniciadas / pendentes</option><option value="paid">Finalizadas / pagas</option><option value="failed">Não concluídas</option></select></label><button className="refresh-button" onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} /> Atualizar</button></div>
+    <div className="transaction-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">Todas</option><option value="pending">Iniciadas / pendentes</option><option value="paid">Finalizadas / pagas</option><option value="failed">Não concluídas</option></select></label><div className="transaction-toolbar-actions"><button className="refresh-button" onClick={() => setRevision(value => value + 1)}><RefreshCw size={14} /> Atualizar</button>{isOwner && <button className="transaction-clear-button" onClick={clearTransactions} disabled={clearing}><Trash2 size={14} />{clearing ? 'Limpando…' : 'Limpar transações'}</button>}</div></div>
     {error && <p className="login-error" role="alert">{error}</p>}{notice && <p className="admin-notice" role="status">{notice}</p>}
     {loading ? <p className="store-status">Carregando transações…</p> : orders.length ? <div className="transaction-table-wrap"><table className="transaction-table"><thead><tr><th>Pedido / jogador</th><th>Data e hora</th><th>Valor</th><th>Pagamento</th><th>Status</th><th>Entrega</th><th>Produtos</th></tr></thead><tbody>{orders.map(order => <tr key={order.id}>
       <td><strong>{order.player}</strong><small title={order.id}>{order.id.slice(0, 8)}</small></td>

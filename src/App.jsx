@@ -3,7 +3,7 @@ import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
-  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save, RefreshCw
+  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save, RefreshCw, TrendingUp, TrendingDown
 } from 'lucide-react'
 
 const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
@@ -38,6 +38,11 @@ const formatSiteDateTime = value => {
   return instant ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(instant) : '—'
 }
 const formatCountdown = seconds => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+const brasiliaDateParts = date => Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+}).formatToParts(date).map(part => [part.type, part.value]))
+const currentBrasiliaMonth = () => { const parts = brasiliaDateParts(new Date()); return `${parts.year}-${parts.month}` }
+const currentBrasiliaDate = () => { const parts = brasiliaDateParts(new Date()); return `${parts.year}-${parts.month}-${parts.day}` }
 
 function loadMe() {
   return fetch(api('/v1/site/me'), { credentials: 'include' })
@@ -780,12 +785,13 @@ function AdminPanel() {
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações'], ['finance', 'Financeiro']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
     {temporaryPassword && <div className="admin-temporary-password"><code>{temporaryPassword}</code><button className="refresh-button" onClick={copyTemporaryPassword}><Copy size={14} /> Copiar</button><button className="admin-dismiss" onClick={() => setTemporaryPassword('')} aria-label="Ocultar senha"><X size={15} /></button></div>}
     {tab === 'transactions' && transactionAccess.canView && <StoreTransactions admin={admin} access={transactionAccess} onAccessChange={setTransactionAccess} />}
+    {tab === 'finance' && transactionAccess.canView && <StoreFinance />}
     {tab === 'store' && ['owner', 'admin'].includes(admin.role) && <StoreEditor />}
     {tab === 'accounts' && <div className="admin-workspace">
       <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
@@ -940,6 +946,94 @@ function StoreTransactions({ admin, access, onAccessChange }) {
       <td><span className={`transaction-delivery ${order.deliveryStatus}`}>{deliveryLabel(order.deliveryStatus)}</span></td>
       <td>{order.items.map(item => <div className="transaction-item" key={`${order.id}-${item.productId}`}><span>{item.name} × {item.quantity}</span><small>{deliveryLabel(item.deliveryStatus)} · {money(item.priceCents * item.quantity)}</small></div>)}</td>
     </tr>)}</tbody></table></div> : <p className="admin-empty">Nenhuma transação neste filtro.</p>}
+  </div>
+}
+
+function StoreFinance() {
+  const [month, setMonth] = useState(currentBrasiliaMonth)
+  const [report, setReport] = useState({ summary: null, sales: [], expenses: [] })
+  const [expenseForm, setExpenseForm] = useState({ expenseDate: currentBrasiliaDate(), category: '', description: '', amount: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [revision, setRevision] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    fetch(api(`/v1/site/admin/store/finance?month=${encodeURIComponent(month)}`), { credentials: 'include' })
+      .then(response => response.ok ? response.json() : Promise.reject())
+      .then(data => { if (active) setReport(data) })
+      .catch(() => { if (active) setError('Não foi possível carregar o fechamento mensal.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [month, revision])
+
+  const money = cents => (Number(cents || 0) / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const expenseDateLabel = value => {
+    const instant = brasiliaDate(`${value}T12:00:00-03:00`)
+    return instant ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'America/Sao_Paulo' }).format(instant) : '—'
+  }
+
+  async function saveExpense(event) {
+    event.preventDefault()
+    const amountCents = Math.round(Number(expenseForm.amount.replace(',', '.')) * 100)
+    if (!Number.isSafeInteger(amountCents) || amountCents < 1) return setError('Informe um valor válido para a despesa.')
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/store/finance/expenses'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...expenseForm, amountCents }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error === 'invalid_expense' ? 'Confira data, categoria, descrição e valor da despesa.' : 'Não foi possível registrar a despesa.')
+      setExpenseForm(current => ({ ...current, category: '', description: '', amount: '' }))
+      setNotice('Despesa registrada no caixa do mês.')
+      setRevision(value => value + 1)
+    } catch (requestError) { setError(requestError.message) } finally { setSaving(false) }
+  }
+
+  async function removeExpense(expense) {
+    if (!window.confirm(`Excluir a despesa “${expense.description}” de ${money(expense.amountCents)}?`)) return
+    setDeletingId(expense.id); setError(''); setNotice('')
+    try {
+      const response = await fetch(api(`/v1/site/admin/store/finance/expenses/${expense.id}`), { method: 'DELETE', credentials: 'include' })
+      if (!response.ok) throw new Error('Não foi possível excluir a despesa.')
+      setNotice('Despesa excluída e registrada na auditoria.')
+      setRevision(value => value + 1)
+    } catch (requestError) { setError(requestError.message) } finally { setDeletingId(null) }
+  }
+
+  const summary = report.summary || { incomeCents: 0, expenseCents: 0, balanceCents: 0, salesCount: 0, expenseCount: 0 }
+  const monthLabel = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'America/Sao_Paulo' }).format(new Date(`${month}-15T12:00:00-03:00`))
+
+  return <div className="admin-workspace finance-workspace">
+    <div className="finance-toolbar"><div><strong>Caixa do servidor</strong><small>Fechamento mensal de entradas e saídas.</small></div><label>Mês de referência<input type="month" value={month} onChange={event => setMonth(event.target.value)} /></label></div>
+    {error && <p className="login-error" role="alert">{error}</p>}{notice && <p className="admin-notice" role="status">{notice}</p>}
+    <div className="finance-summary" aria-label={`Resumo financeiro de ${monthLabel}`}>
+      <article><span>Entradas de vendas</span><strong>{money(summary.incomeCents)}</strong><small>{summary.salesCount} pedidos pagos</small></article>
+      <article><span>Despesas do servidor</span><strong>{money(summary.expenseCents)}</strong><small>{summary.expenseCount} lançamentos</small></article>
+      <article className={summary.balanceCents < 0 ? 'negative' : 'positive'}><span>{summary.balanceCents < 0 ? 'Faltou no caixa' : 'Saldo do mês'}</span><strong>{money(Math.abs(summary.balanceCents))}</strong><small>{summary.balanceCents < 0 ? 'Saídas acima das entradas' : 'Entradas menos despesas'}</small></article>
+    </div>
+    <section className="finance-section"><div className="finance-section-heading"><div><h2>Registrar despesa</h2><p>Competência considerada pelo calendário de Brasília.</p></div></div>
+      <form className="finance-expense-form" onSubmit={saveExpense}>
+        <label>Data<input type="date" required value={expenseForm.expenseDate} onChange={event => setExpenseForm(current => ({ ...current, expenseDate: event.target.value }))} /></label>
+        <label>Categoria<input required minLength={2} maxLength={40} value={expenseForm.category} onChange={event => setExpenseForm(current => ({ ...current, category: event.target.value }))} placeholder="Hospedagem, domínio…" /></label>
+        <label>Descrição<input required minLength={2} maxLength={180} value={expenseForm.description} onChange={event => setExpenseForm(current => ({ ...current, description: event.target.value }))} placeholder="Ex.: mensalidade do servidor" /></label>
+        <label>Valor (R$)<input required type="number" min="0.01" max="10000000" step="0.01" value={expenseForm.amount} onChange={event => setExpenseForm(current => ({ ...current, amount: event.target.value }))} /></label>
+        <button className="button button-primary" disabled={saving}>{saving ? 'Registrando…' : 'Adicionar despesa'} <Plus size={16} /></button>
+      </form>
+    </section>
+    <div className="finance-ledgers">
+      <section className="finance-section"><div className="finance-section-heading"><div><h2>Vendas pagas</h2><p>{monthLabel}</p></div></div>
+        {loading ? <p className="store-status">Carregando fechamento…</p> : report.sales.length ? <div className="finance-entry-list">{report.sales.map(sale => <article key={sale.id}><div><strong>{sale.player}</strong><small>{formatSiteDateTime(sale.paidAt)} · {sale.paymentMethodId === 'pix' ? 'Pix' : sale.paymentMethodId || 'Meio não informado'}</small></div><strong>{money(sale.amountCents)}</strong></article>)}</div> : <p className="admin-empty">Nenhuma venda paga neste mês.</p>}
+      </section>
+      <section className="finance-section"><div className="finance-section-heading"><div><h2>Despesas registradas</h2><p>{monthLabel}</p></div></div>
+        {loading ? <p className="store-status">Carregando fechamento…</p> : report.expenses.length ? <div className="finance-entry-list">{report.expenses.map(expense => <article key={expense.id}><div><strong>{expense.description}</strong><small>{expense.category} · {expenseDateLabel(expense.expenseDate)} · Por {expense.createdBy}</small></div><strong>{money(expense.amountCents)}</strong><button className="finance-expense-delete" onClick={() => removeExpense(expense)} disabled={deletingId === expense.id} aria-label={`Excluir despesa ${expense.description}`} title="Excluir despesa"><Trash2 size={15} /></button></article>)}</div> : <p className="admin-empty">Nenhuma despesa neste mês.</p>}
+      </section>
+    </div>
   </div>
 }
 

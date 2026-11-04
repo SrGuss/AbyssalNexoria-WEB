@@ -25,7 +25,7 @@ function isValidCpf(value) {
 }
 // O servidor do site repassa /api/* para a API (mesma origem = cookie de sessão funciona)
 const api = path => `/api${path}`
-const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}) })
+const toPlayer = d => ({ id: d.nick, nick: d.nick, syncedAt: d.updatedAt, ...(d.profile || {}), email: d.email, emailVerified: d.emailVerified, emailRequired: d.emailRequired, emailDeadline: d.emailDeadline })
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const brasiliaDate = value => {
   if (!value) return null
@@ -57,7 +57,12 @@ function App() {
   const [player, setPlayer] = useState(null)
   const [loginOpen, setLoginOpen] = useState(false)
   const [credentials, setCredentials] = useState({ nick: '', password: '' })
+  const [loginMode, setLoginMode] = useState('password')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginCode, setLoginCode] = useState('')
+  const [emailCodeRequested, setEmailCodeRequested] = useState(false)
   const [loginError, setLoginError] = useState('')
+  const [loginNotice, setLoginNotice] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
   const [page, setPage] = useState(window.location.hash === '#conta' ? 'account' : window.location.hash === '#admin' ? 'admin' : window.location.hash === '#loja' ? 'store' : 'home')
 
@@ -113,14 +118,32 @@ function App() {
     event.preventDefault()
     setLoggingIn(true)
     setLoginError('')
+    setLoginNotice('')
     try {
-      const response = await fetch(api('/v1/site/login'), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credentials) })
-      if (response.status === 401) throw new Error('Nick ou senha incorretos.')
+      const emailLogin = loginMode === 'email'
+      const requestingCode = emailLogin && !emailCodeRequested
+      const endpoint = emailLogin
+        ? `/v1/site/auth/email-code/${requestingCode ? 'request' : 'verify'}`
+        : '/v1/site/login'
+      const body = emailLogin
+        ? { email: loginEmail, ...(requestingCode ? {} : { code: loginCode }) }
+        : credentials
+      const response = await fetch(api(endpoint), { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const data = await response.json().catch(() => ({}))
+      if (response.status === 401) throw new Error(emailLogin ? 'Código inválido ou expirado.' : 'Nick ou senha incorretos.')
       if (response.status === 429) throw new Error('Muitas tentativas. Aguarde alguns minutos.')
       if (!response.ok) throw new Error('Serviço indisponível. Tente novamente em instantes.')
+      if (requestingCode) {
+        setEmailCodeRequested(true)
+        setLoginNotice(data.message || 'Se houver uma conta vinculada a este e-mail, enviaremos um código.')
+        return
+      }
       setPlayer(await loadMe())
       setLoginOpen(false)
       setCredentials({ nick: '', password: '' })
+      setLoginEmail('')
+      setLoginCode('')
+      setEmailCodeRequested(false)
       window.location.hash = page === 'store' ? 'loja' : 'conta'
     } catch (error) {
       setLoginError(error.message || 'Não foi possível entrar.')
@@ -260,11 +283,25 @@ function App() {
           <span className="login-mark"><Compass size={24} /></span>
           <p className="section-kicker"><span>ÁREA DO JOGADOR</span></p>
           <h2 id="login-title">Sua jornada<br /><span>continua aqui.</span></h2>
-          <p>Entre com o mesmo nick e senha do servidor. Jogadores Bedrock: use o nick com o ponto no início.</p>
-          <label>Nick<input required value={credentials.nick} onChange={event => setCredentials({ ...credentials, nick: event.target.value })} autoComplete="username" placeholder="Seu nick no Minecraft" /></label>
-          <label>Senha<input required type="password" value={credentials.password} onChange={event => setCredentials({ ...credentials, password: event.target.value })} autoComplete="current-password" placeholder="Sua senha" /></label>
+          <div className="login-method-switch" role="group" aria-label="Método de entrada">
+            <button type="button" className={loginMode === 'password' ? 'active' : ''} onClick={() => { setLoginMode('password'); setLoginError(''); setLoginNotice('') }}>Nick e senha</button>
+            <button type="button" className={loginMode === 'email' ? 'active' : ''} onClick={() => { setLoginMode('email'); setLoginError(''); setLoginNotice('') }}>Código por e-mail</button>
+          </div>
+          {loginMode === 'password' ? <>
+            <p>Entre com o mesmo nick e senha do servidor. Jogadores Bedrock: use o nick com o ponto no início.</p>
+            <label>Nick<input required value={credentials.nick} onChange={event => setCredentials({ ...credentials, nick: event.target.value })} autoComplete="username" placeholder="Seu nick no Minecraft" /></label>
+            <label>Senha<input required type="password" value={credentials.password} onChange={event => setCredentials({ ...credentials, password: event.target.value })} autoComplete="current-password" placeholder="Sua senha" /></label>
+          </> : <>
+            <p>Use o e-mail confirmado na sua conta. O código vale por cinco minutos.</p>
+            <label>E-mail<input required type="email" value={loginEmail} onChange={event => setLoginEmail(event.target.value)} autoComplete="email" placeholder="voce@exemplo.com" disabled={emailCodeRequested} /></label>
+            {emailCodeRequested && <>
+              <label>Código de seis dígitos<input required inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={loginCode} onChange={event => setLoginCode(event.target.value)} /></label>
+              <button type="button" className="login-change-email" onClick={() => { setEmailCodeRequested(false); setLoginCode(''); setLoginNotice('') }}>Alterar e-mail</button>
+            </>}
+          </>}
+          {loginNotice && <p className="login-notice" role="status">{loginNotice}</p>}
           {loginError && <p className="login-error">{loginError}</p>}
-          <button className="button button-primary" disabled={loggingIn}>{loggingIn ? 'Entrando...' : 'Entrar na conta'} <ChevronRight size={17} /></button>
+          <button className="button button-primary" disabled={loggingIn}>{loggingIn ? (emailCodeRequested ? 'Validando…' : 'Enviando…') : loginMode === 'email' && !emailCodeRequested ? 'Enviar código' : 'Entrar na conta'} <ChevronRight size={17} /></button>
         </form>
       </div>}
 
@@ -493,17 +530,84 @@ function StorePage({ player, onLogin }) {
 
 function PlayerPanel({ player, onRefresh }) {
   const [busy, setBusy] = useState(false)
+  const [emailAddress, setEmailAddress] = useState(player.email || '')
+  const [emailToken, setEmailToken] = useState('')
+  const [emailCodeSent, setEmailCodeSent] = useState(false)
+  const [emailVerified, setEmailVerified] = useState(Boolean(player.emailVerified))
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [emailError, setEmailError] = useState('')
+  const [emailNotice, setEmailNotice] = useState('')
   const date = value => value ? formatSiteDateTime(value) : 'Sem dados'
   const num = value => Number.isFinite(value) ? value.toLocaleString('pt-BR') : null
   const loc = player.lastLocation
   const synced = !!(player.lastSeenAt || player.lastLoginAt)
   const list = value => Array.isArray(value) ? value : []
   async function refresh() { setBusy(true); try { await onRefresh() } finally { setBusy(false) } }
+  async function requestEmailCode(event) {
+    event.preventDefault()
+    setEmailBusy(true)
+    setEmailError('')
+    setEmailNotice('')
+    try {
+      const response = await fetch(api('/v1/site/auth/email-code/link/request'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailAddress }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const messages = {
+          invalid_email: 'Informe um endereço de e-mail válido.',
+          email_already_verified: 'Esse e-mail já está confirmado.',
+          email_in_use: 'Esse e-mail já pertence a outra conta.',
+          email_code_cooldown: 'Aguarde um minuto antes de pedir outro código.',
+          too_many_requests: 'Muitas solicitações. Aguarde antes de tentar novamente.',
+          email_unavailable: 'Não foi possível enviar o e-mail agora. Tente novamente mais tarde.',
+        }
+        throw new Error(messages[data.error] || 'Não foi possível solicitar o código.')
+      }
+      setEmailCodeSent(true)
+      setEmailNotice(data.message || 'Código enviado. Confira sua caixa de entrada.')
+    } catch (error) {
+      setEmailError(error.message || 'Não foi possível solicitar o código.')
+    } finally { setEmailBusy(false) }
+  }
+  async function verifyEmailCode(event) {
+    event.preventDefault()
+    setEmailBusy(true)
+    setEmailError('')
+    setEmailNotice('')
+    try {
+      const response = await fetch(api('/v1/site/auth/email-code/link/verify'), {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailAddress, code: emailToken }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(response.status === 401 ? 'Código inválido ou expirado.' : 'Não foi possível confirmar o e-mail.')
+      setEmailVerified(true)
+      setEmailAddress(data.email)
+      setEmailCodeSent(false)
+      setEmailToken('')
+      setEmailNotice('E-mail confirmado com sucesso.')
+    } catch (error) {
+      setEmailError(error.message || 'Não foi possível confirmar o e-mail.')
+    } finally { setEmailBusy(false) }
+  }
   return <section className="account-area section-wrap" id="conta">
     <div className="account-heading"><div><div className="section-kicker"><span>SEU PERFIL · SINCRONIZADO PELO SERVIDOR</span></div><h2>Olá, <span>{player.nick}</span>.</h2></div>
       <div className="profile-badges"><span className={player.online ? 'online-badge' : 'offline-badge'}><i />{player.online ? 'Online no servidor' : 'Offline'}</span><span className="vip-badge"><Crown size={15} /> {player.vip || 'Sem VIP'}</span><button className="refresh-button" onClick={refresh} disabled={busy}>{busy ? 'Pedindo dados ao servidor…' : 'Atualizar agora'}</button></div></div>
     {!synced && <p className="management-notice">Ainda não há dados deste jogador. Entre no servidor e faça login no jogo: o perfil é enviado automaticamente.</p>}
     <div className="account-grid">
+      <article className="account-security-card">
+        <div className="account-security-copy"><Shield /><div><strong>E-mail de segurança</strong><p>{emailVerified ? `${emailAddress} · confirmado` : player.emailRequired ? `Obrigatório até ${date(player.emailDeadline)}.` : 'Opcional. Confirme um e-mail para entrar também com código.'}</p></div></div>
+        {!emailVerified && <form onSubmit={emailCodeSent ? verifyEmailCode : requestEmailCode}>
+          <label>E-mail<input type="email" required maxLength={254} autoComplete="email" disabled={emailCodeSent || emailBusy} value={emailAddress} onChange={event => setEmailAddress(event.target.value)} placeholder="voce@exemplo.com" /></label>
+          {emailCodeSent && <label>Código<input required inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]{6}" value={emailToken} onChange={event => setEmailToken(event.target.value)} /></label>}
+          {emailError && <p className="login-error" role="alert">{emailError}</p>}
+          {emailNotice && <p className="login-notice" role="status">{emailNotice}</p>}
+          <div className="account-security-actions"><button className="button button-primary" disabled={emailBusy}>{emailBusy ? 'Aguarde…' : emailCodeSent ? 'Confirmar e-mail' : 'Enviar código'} <ChevronRight size={16} /></button>{emailCodeSent && <button type="button" className="admin-back" onClick={() => { setEmailCodeSent(false); setEmailToken(''); setEmailNotice('') }}>Alterar e-mail</button>}</div>
+        </form>}
+        {emailVerified && emailNotice && <p className="login-notice" role="status">{emailNotice}</p>}
+      </article>
       <article className="profile-card"><span className="profile-avatar">{player.nick.replace(/^\./, '').slice(0, 1).toUpperCase()}</span><strong>{player.nick}</strong><small>Nível {player.level ?? 0} · {num(player.totalExperience) ?? 0} XP total · Sincronizado: {date(player.syncedAt)}</small></article>
       <article className="stat-card"><Coins /><span>Saldo</span><strong>{num(player.money) ? `${num(player.money)} moedas` : 'Não sincronizado'}</strong></article>
       <article className="stat-card"><Clock3 /><span>Último login</span><strong>{date(player.lastLoginAt)}</strong></article>
@@ -549,6 +653,7 @@ function AdminPanel() {
   const [luckPermsCatalog, setLuckPermsCatalog] = useState({ available: false, syncedAt: null, groups: [] })
   const [actions, setActions] = useState([])
   const [staff, setStaff] = useState([])
+  const [emailPolicy, setEmailPolicy] = useState({ required: false, deadlineHours: 72 })
   const [search, setSearch] = useState('')
   const [reload, setReload] = useState(0)
   const [selectedAccount, setSelectedAccount] = useState(null)
@@ -583,13 +688,15 @@ function AdminPanel() {
       fetch(api('/v1/site/admin/luckperms/groups'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       fetch(api('/v1/site/admin/actions'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()),
       admin.role === 'owner' ? fetch(api('/v1/site/admin/staff'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()) : Promise.resolve(null),
-    ]).then(([accountData, roleData, groupsData, actionData, staffData]) => {
+      admin.role === 'owner' ? fetch(api('/v1/site/admin/security/email-policy'), { credentials: 'include' }).then(response => response.ok ? response.json() : Promise.reject()) : Promise.resolve(null),
+    ]).then(([accountData, roleData, groupsData, actionData, staffData, emailPolicyData]) => {
       if (!active) return
       setAccounts(accountData.accounts)
       setRoles(roleData.roles)
       setLuckPermsCatalog(groupsData)
       setActions(actionData.actions)
       if (staffData) setStaff(staffData.staff)
+      if (emailPolicyData) setEmailPolicy(emailPolicyData)
     }).catch(() => { if (active) setError('Não foi possível carregar os dados administrativos.') })
     return () => { active = false }
   }, [admin, search, reload])
@@ -622,7 +729,7 @@ function AdminPanel() {
       if (!response.ok) throw new Error(adminError(data.error))
       setSetupRequired(data.setupRequired)
       setStep('verification')
-      setNotice('Código gerado. Confira o log da API.')
+      setNotice(`Código enviado para ${data.emailHint}.`)
     } catch (requestError) {
       setError(requestError.message || 'Não foi possível gerar o código.')
     } finally { setBusy(false) }
@@ -770,6 +877,25 @@ function AdminPanel() {
     setReload(value => value + 1)
   }
 
+  async function saveEmailPolicy(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const response = await fetch(api('/v1/site/admin/security/email-policy'), {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(emailPolicy),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(adminError(data.error))
+      setEmailPolicy({ required: data.required, deadlineHours: data.deadlineHours })
+      setNotice('Política de e-mail atualizada.')
+    } catch (requestError) {
+      setError(requestError.message || 'Não foi possível salvar a política.')
+    } finally { setBusy(false) }
+  }
+
   async function copyTemporaryPassword() {
     try {
       await navigator.clipboard.writeText(temporaryPassword)
@@ -785,7 +911,7 @@ function AdminPanel() {
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações'], ['finance', 'Financeiro']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações'], ['finance', 'Financeiro']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe'], ['security', 'Segurança']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
@@ -821,7 +947,15 @@ function AdminPanel() {
     {tab === 'actions' && <div className="admin-workspace"><div className="admin-toolbar"><strong>Fila e histórico recente</strong><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div><div className="admin-action-list">{actions.map(action => <article className="admin-action-row" key={action.id}><div><strong>{actionLabel(action.action)} · {action.nick}</strong><small>Por {action.actor} · {formatSiteDateTime(action.createdAt)}</small></div><span className={`admin-action-status ${action.status}`}>{action.status === 'done' ? 'Concluída' : action.status === 'error' ? 'Falhou' : 'Pendente'}</span><small>{action.result || ''}</small></article>)}{actions.length === 0 && <p className="admin-empty">Nenhuma ação registrada.</p>}</div></div>}
     {tab === 'staff' && admin.role === 'owner' && <div className="admin-workspace">
       <form className="admin-role-form" onSubmit={inviteStaff}><label>Nick cadastrado no servidor<input required pattern="\.?[A-Za-z0-9_]{3,16}" value={staffForm.nick} onChange={event => setStaffForm(current => ({ ...current, nick: event.target.value }))} placeholder="Nick exato da conta" /></label><label>Papel<select value={staffForm.role} onChange={event => setStaffForm(current => ({ ...current, role: event.target.value }))}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select></label><button className="button button-primary" type="submit" disabled={busy}>Convidar <ChevronRight size={17} /></button></form>
-      <div className="admin-staff-list">{staff.map(member => <article className="admin-staff-row" key={member.nick}><div><strong>{member.nick}</strong><small>{member.configured ? 'Acesso configurado' : 'Aguardando primeiro acesso'}</small></div><select aria-label={`Papel de ${member.nick}`} value={member.role} onChange={event => changeStaffRole(member, event.target.value)}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select><button className="admin-dismiss" onClick={() => removeStaff(member)} aria-label={`Revogar acesso de ${member.nick}`} title="Revogar acesso"><X size={16} /></button></article>)}{staff.length === 0 && <p className="admin-empty">Nenhum membro convidado.</p>}</div>
+      <div className="admin-staff-list">{staff.map(member => <article className="admin-staff-row" key={member.nick}><div><strong>{member.nick}</strong><small>{member.emailVerified ? 'E-mail confirmado' : 'E-mail pendente · prazo de 72h'} · {member.configured ? 'Acesso configurado' : 'Aguardando primeiro acesso'}</small></div><select aria-label={`Papel de ${member.nick}`} value={member.role} onChange={event => changeStaffRole(member, event.target.value)}><option value="admin">Administrador</option><option value="moderator">Moderador</option><option value="helper">Ajudante</option></select><button className="admin-dismiss" onClick={() => removeStaff(member)} aria-label={`Revogar acesso de ${member.nick}`} title="Revogar acesso"><X size={16} /></button></article>)}{staff.length === 0 && <p className="admin-empty">Nenhum membro convidado.</p>}</div>
+    </div>}
+    {tab === 'security' && admin.role === 'owner' && <div className="admin-workspace">
+      <form className="admin-email-policy" onSubmit={saveEmailPolicy}>
+        <label className="admin-email-policy-toggle"><input type="checkbox" checked={emailPolicy.required} onChange={event => setEmailPolicy(current => ({ ...current, required: event.target.checked }))} /><span><strong>Exigir e-mail confirmado de todos os usuários</strong><small>Usuários comuns podem manter o e-mail opcional quando esta opção estiver desativada. Equipe administrativa continua obrigada.</small></span></label>
+        <label>Prazo para cadastro (horas)<input type="number" min="1" max="720" required value={emailPolicy.deadlineHours} onChange={event => setEmailPolicy(current => ({ ...current, deadlineHours: Number(event.target.value) }))} /></label>
+        <p>O prazo começa na ativação da política para contas existentes e na criação da conta para novos usuários. Cargos administrativos têm prazo próprio de 72 horas.</p>
+        <button className="button button-primary" disabled={busy}>{busy ? 'Salvando…' : 'Salvar política'} <Save size={15} /></button>
+      </form>
     </div>}
   </section>
 
@@ -1152,6 +1286,10 @@ function adminError(code) {
     admin_not_configured: 'O nick administrador ainda não foi configurado na API.',
     invalid_credentials: 'Nick ou senha inválidos.',
     invalid_or_expired_token: 'Código inválido ou expirado. Gere outro código.',
+    email_required: 'Cadastre e confirme um e-mail em Minha Conta antes de entrar no painel.',
+    email_unavailable: 'Não foi possível enviar o código agora. Tente novamente mais tarde.',
+    invalid_email_policy: 'Informe um prazo entre 1 e 720 horas.',
+    email_registration_required: 'Confirme seu e-mail em Minha Conta para continuar.',
     admin_already_registered: 'O acesso administrativo já foi configurado.',
     admin_not_registered: 'Configure o acesso administrativo primeiro.',
     invalid_admin_password: 'A senha precisa ter 12 caracteres e ser diferente da senha do servidor.',

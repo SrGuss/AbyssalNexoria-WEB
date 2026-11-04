@@ -484,3 +484,67 @@ h2 { font-size: clamp(37px, 4.2vw, 53px); line-height: 1.13; margin-bottom: 0; }
 .admin-staff-row select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; color: #f2ecfa; background: #171321; }
 @media (max-width: 700px) { .admin-role-form { grid-template-columns: 1fr; }.admin-role-form .button { width: 100%; } }
 @media (max-width: 560px) { .admin-toolbar { align-items: stretch; flex-direction: column; }.admin-account-row { grid-template-columns: minmax(0, 1fr) auto; }.admin-account-row > div:nth-child(2) { grid-column: 1; }.admin-account-row > button { grid-column: 2; grid-row: 1 / span 2; }.admin-staff-row { grid-template-columns: minmax(0, 1fr) auto; }.admin-staff-row select { grid-column: 1; }.admin-staff-row .admin-dismiss { grid-column: 2; grid-row: 1 / span 2; }.admin-form-actions { align-items: stretch; flex-direction: column; }.admin-form-actions .button { width: 100%; }.admin-temporary-password { flex-wrap: wrap; }.admin-temporary-password code { flex-basis: 100%; } }
+
+.vip-config-editor { display: grid; gap: 18px; padding-top: 20px; }
+.vip-config-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.vip-config-heading h2 { margin: 8px 0 4px; color: #f0e9fa; font-size: 24px; }
+.vip-config-heading p { margin: 0; color: #9f94b2; font-size: 11px; }
+.vip-config-tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.vip-config-tabs button { flex: 0 0 auto; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; color: #a69ab8; background: transparent; cursor: pointer; font-size: 11px; }
+.vip-config-tabs button.active { border-bottom-color: #b49bff; color: #f0e9fa; }
+.vip-config-layout { display: grid; grid-template-columns: minmax(180px, 230px) minmax(0, 1fr); align-items: start; gap: 20px; }
+.vip-config-list { display: grid; gap: 10px; min-width: 0; }
+.vip-config-create { display: grid; grid-template-columns: minmax(0, 1fr) 38px; gap: 7px; }
+.vip-config-create input, .vip-config-fields input, .vip-config-fields select, .vip-config-fields textarea { width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; outline: none; color: #f2ecfa; background: #171321; font: inherit; font-size: 11px; }
+.vip-config-fields input:focus, .vip-config-fields select:focus, .vip-config-fields textarea:focus { border-color: #aa8af5; }
+.vip-config-entries { display: grid; max-height: 64vh; overflow-y: auto; border-top: 1px solid var(--line); }
+.vip-config-entries button { display: grid; gap: 4px; min-width: 0; padding: 11px 9px; border: 0; border-bottom: 1px solid var(--line); color: #d7cbea; background: transparent; text-align: left; cursor: pointer; }
+.vip-config-entries button.active { background: rgba(180,155,255,.1); box-shadow: inset 2px 0 #b49bff; }
+.vip-config-entries strong { overflow: hidden; color: #f0e9fa; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.vip-config-entries small { color: #9186a4; font-size: 9px; }
+.vip-config-form { display: grid; gap: 16px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(22,18,39,.55); }
+.vip-config-form-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.vip-config-form-heading > div { display: grid; gap: 4px; min-width: 0; }
+.vip-config-form-heading strong { overflow: hidden; color: #f0e9fa; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.vip-config-form-heading small { color: #9186a4; font-size: 9px; }
+.vip-config-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; }
+.vip-config-fields > label, .vip-config-item-fields > label, .vip-config-reward-add > label { display: grid; gap: 6px; min-width: 0; color: #c6bad9; font-size: 10px; font-weight: 700; }
+.vip-config-fields > label > textarea, .vip-config-item-fields > label > textarea { resize: vertical; line-height: 1.5; }
+.vip-config-inline-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.vip-config-inline-fields > label { display: grid; align-content: start; gap: 6px; min-width: 0; color: #c6bad9; font-size: 10px; font-weight: 700; }
+.vip-config-check { display: flex !important; align-items: center; gap: 8px !important; min-height: 35px; color: #c6bad9; font-size: 10px; }
+.vip-config-check input, .vip-config-multi input { width: 15px; height: 15px; margin: 0; accent-color: #a58be8; }
+.vip-config-multi { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.vip-config-multi legend { padding: 0 5px; color: #c6bad9; font-size: 10px; }
+.vip-config-multi label { display: flex; align-items: center; gap: 7px; min-width: 0; overflow-wrap: anywhere; color: #d7cbea; font-size: 10px; }
+.vip-config-multi small { grid-column: 1 / -1; color: #9186a4; font-size: 10px; }
+.vip-config-inventory-heading { grid-column: 1 / -1; display: grid; gap: 4px; padding-top: 4px; }
+.vip-config-inventory-heading strong { color: #f0e9fa; font-size: 12px; }
+.vip-config-inventory-heading small { color: #9186a4; font-size: 9px; }
+.vip-config-inventory { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; padding: 8px; border: 2px solid #433b52; border-radius: 5px; background: #272131; }
+.vip-config-inventory button { position: relative; display: grid; align-content: center; justify-items: center; gap: 2px; min-width: 0; aspect-ratio: 1; overflow: hidden; padding: 2px; border: 2px solid; border-color: #17131e #575064 #635a72 #24202e; color: #8f85a6; background: linear-gradient(135deg,#3f394b,#322d3d); cursor: pointer; }
+.vip-config-inventory button.selected { outline: 2px solid #d5c1ff; outline-offset: -2px; }
+.vip-config-inventory button.filled { color: #e8ddfb; background: linear-gradient(135deg,#574878,#3b3054); }
+.vip-config-inventory button small { position: absolute; top: 2px; left: 3px; color: #8f85a6; font-size: 7px; }
+.vip-config-item-icon { width: 58%; height: 58%; object-fit: contain; image-rendering: pixelated; }
+.vip-config-inventory button span { display: -webkit-box; max-width: 100%; overflow: hidden; font-size: 8px; line-height: 1.15; text-align: center; text-overflow: ellipsis; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.vip-config-inventory button b { position: absolute; right: 3px; bottom: 1px; color: white; font-size: 8px; text-shadow: 1px 1px #16111c; }
+.vip-config-item-builder, .vip-config-rewards { grid-column: 1 / -1; display: grid; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: rgba(10,8,17,.4); }
+.vip-config-item-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; }
+.vip-config-attributes { display: grid; grid-column: 1 / -1; gap: 8px; }.vip-config-attributes > strong { color: #c6bad9; font-size: 10px; }.vip-config-attributes > div { display: grid; grid-template-columns: minmax(110px,1fr) 90px minmax(130px,1fr) minmax(100px,.8fr) 30px; align-items: end; gap: 7px; padding: 8px 0; border-top: 1px solid var(--line); }.vip-config-attributes > div > label { display: grid; gap: 5px; min-width: 0; color: #a99dbb; font-size: 9px; }.vip-config-attributes .admin-dismiss { justify-self: center; }
+.vip-config-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.vip-config-actions .button { display: flex; align-items: center; gap: 8px; padding: 9px 12px; font-size: 10px; }
+.vip-config-rewards > strong { color: #f0e9fa; font-size: 12px; }
+.vip-config-rewards article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.vip-config-rewards article span { color: #c6bad9; font-size: 10px; }
+.vip-config-rewards article small { overflow: hidden; color: #9186a4; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.vip-config-reward-add { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: end; gap: 9px; }
+.vip-config-reward-item { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.vip-config-reward-item > .refresh-button { justify-self: start; }
+.vip-config-settings { display: grid; gap: 14px; max-width: 760px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: rgba(22,18,39,.55); }.vip-config-settings > div { display: grid; gap: 4px; }.vip-config-settings > div strong { color: #f0e9fa; font-size: 13px; }.vip-config-settings > div small { color: #9186a4; font-size: 10px; }
+.vip-config-setting { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }.vip-config-setting > input { flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 0 0; accent-color: #a58be8; }.vip-config-setting > span { display: grid; gap: 4px; }.vip-config-setting strong { color: #e8def6; font-size: 11px; }.vip-config-setting small { color: #9186a4; font-size: 9px; line-height: 1.5; }.vip-config-settings .button { display: flex; align-items: center; gap: 8px; justify-self: start; padding: 10px 13px; font-size: 10px; }
+.vip-config-actions-page { display: grid; grid-template-columns: minmax(260px, .75fr) minmax(0, 1.25fr); align-items: start; gap: 20px; }.vip-admin-action-form, .vip-admin-action-history { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: rgba(22,18,39,.55); }.vip-admin-action-form > label { display: grid; gap: 6px; color: #c6bad9; font-size: 10px; font-weight: 700; }.vip-admin-action-form input, .vip-admin-action-form select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; color: #f2ecfa; background: #171321; font: inherit; font-size: 11px; }.vip-admin-action-form label small { color: #9186a4; font-size: 9px; font-weight: 400; }.vip-admin-action-form > .button { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; font-size: 10px; }
+.vip-player-info { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }.vip-player-info strong { color: #f0e9fa; font-size: 12px; }.vip-player-info span, .vip-player-info small, .vip-player-info p { margin: 0; color: #a99dbb; font-size: 10px; line-height: 1.5; }
+.vip-admin-action-history > div { display: grid; gap: 4px; }.vip-admin-action-history > div strong { color: #f0e9fa; font-size: 12px; }.vip-admin-action-history > div small { color: #9186a4; font-size: 9px; }.vip-admin-action-history > article { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--line); }.vip-admin-action-history > article > div { display: grid; gap: 4px; min-width: 0; }.vip-admin-action-history > article strong { overflow: hidden; color: #e8def6; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }.vip-admin-action-history > article small { color: #9186a4; font-size: 9px; }.vip-admin-action-history > article > small { grid-column: 1 / -1; }.vip-admin-action-history .admin-action-status { font-size: 9px; }
+@media (max-width: 820px) { .vip-config-layout { grid-template-columns: 1fr; }.vip-config-entries { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 180px; }.vip-config-entries button { border-right: 1px solid var(--line); } }
+@media (max-width: 560px) { .vip-config-heading { align-items: flex-start; flex-direction: column; }.vip-config-form { padding: 11px; }.vip-config-fields, .vip-config-item-fields { grid-template-columns: 1fr; }.vip-config-attributes > div { grid-template-columns: 1fr 1fr; }.vip-config-inline-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }.vip-config-multi { grid-template-columns: 1fr; }.vip-config-reward-add { grid-template-columns: 1fr; }.vip-config-reward-add .refresh-button { justify-self: start; }.vip-config-inventory { gap: 2px; padding: 5px; }.vip-config-inventory button small { font-size: 6px; left: 2px; top: 1px; }.vip-config-inventory button span { font-size: 7px; }.vip-config-actions-page { grid-template-columns: 1fr; } }

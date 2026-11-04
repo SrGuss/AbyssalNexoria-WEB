@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
+import VipConfigEditor from './VipConfigEditor.jsx'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
@@ -924,7 +925,7 @@ function AdminPanel() {
     <div className="admin-session-heading"><div><div className="section-kicker"><span>ABYSSAL NEXORIA · ADMINISTRAÇÃO</span></div><h1>Painel <span>administrativo.</span></h1></div><button className="refresh-button" onClick={logout}><LogOut size={15} /> Sair</button></div>
     <div className="admin-session-panel"><span className="login-mark"><Shield size={22} /></span><div><strong>{admin.nick}</strong><small>{staffRoleLabel(admin.role || 'owner')}</small></div><span className="admin-session-status">Autenticado</span></div>
     <nav className="admin-tabs" aria-label="Seções administrativas">
-      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações'], ['finance', 'Financeiro']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe'], ['security', 'Segurança']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
+      {[['accounts', 'Contas'], ['actions', 'Atividades'], ...(transactionAccess.canView ? [['transactions', 'Transações'], ['finance', 'Financeiro']] : []), ...(['owner', 'admin'].includes(admin.role) ? [['store', 'Loja'], ['vip-config', 'VIPs e Kits']] : []), ...(admin.role === 'owner' ? [['roles', 'Cargos'], ['staff', 'Equipe'], ['security', 'Segurança']] : [])].map(([key, label]) => <button key={key} className={tab === key ? 'admin-tab active' : 'admin-tab'} onClick={() => setTab(key)}>{label}</button>)}
     </nav>
     {error && <p className="login-error" role="alert">{error}</p>}
     {notice && <p className="admin-notice" role="status">{notice}</p>}
@@ -932,6 +933,7 @@ function AdminPanel() {
     {tab === 'transactions' && transactionAccess.canView && <StoreTransactions admin={admin} access={transactionAccess} onAccessChange={setTransactionAccess} />}
     {tab === 'finance' && transactionAccess.canView && <StoreFinance />}
     {tab === 'store' && ['owner', 'admin'].includes(admin.role) && <StoreEditor />}
+    {tab === 'vip-config' && ['owner', 'admin'].includes(admin.role) && <VipConfigEditor api={api} />}
     {tab === 'accounts' && <div className="admin-workspace">
       <div className="admin-toolbar"><label>Buscar conta<input value={search} onChange={event => setSearch(event.target.value)} placeholder="Nick do servidor" /></label><button className="refresh-button" onClick={() => setReload(value => value + 1)}>Atualizar</button></div>
       <div className="admin-account-list">{accounts.map(account => <article className="admin-account-row" key={account.id}>

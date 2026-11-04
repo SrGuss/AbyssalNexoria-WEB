@@ -3,7 +3,7 @@ import { Payment, initMercadoPago } from '@mercadopago/sdk-react'
 import {
   ArrowUpRight, Menu, X, Copy, Check, Shield, Sparkles, Package, ShoppingCart,
   Sword, Crown, Gem, Compass, ChevronRight, Gamepad2, LogIn, LogOut, LockKeyhole,
-  MapPin, Clock3, Coins, Backpack, Plus, Minus, Trash2, Pencil, Save, RefreshCw, TrendingUp, TrendingDown
+  MapPin, Clock3, Coins, Backpack, KeyRound, Plus, Minus, Trash2, Pencil, Save, RefreshCw, TrendingUp, TrendingDown
 } from 'lucide-react'
 
 const SERVER_IP = 'abyssalnexoria.blazebr.com:25710'
@@ -320,6 +320,9 @@ function StorePage({ player, onLogin }) {
   const [cart, setCart] = useState(() => {
     try { return JSON.parse(localStorage.getItem('nexoria-store-cart') || '{}') } catch { return {} }
   })
+  const [preserveItems, setPreserveItems] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('nexoria-store-preserve-items') || '{}') } catch { return {} }
+  })
   const [loading, setLoading] = useState(true)
   const [checkoutBusy, setCheckoutBusy] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
@@ -347,6 +350,10 @@ function StorePage({ player, onLogin }) {
   }, [cart])
 
   useEffect(() => {
+    localStorage.setItem('nexoria-store-preserve-items', JSON.stringify(preserveItems))
+  }, [preserveItems])
+
+  useEffect(() => {
     if (!paymentResult?.expiresAt || !['pending', 'in_process'].includes(paymentResult.status)) return
     const timer = window.setInterval(() => {
       const currentTime = Date.now()
@@ -358,7 +365,8 @@ function StorePage({ player, onLogin }) {
 
   const visibleProducts = catalog.products.filter(product => category === 'all' || product.categoryId === category)
   const cartItems = useMemo(() => catalog.products.filter(product => Number(cart[product.id]) > 0), [catalog.products, cart])
-  const total = useMemo(() => cartItems.reduce((sum, product) => sum + product.priceCents * Number(cart[product.id]), 0), [cartItems, cart])
+  const total = useMemo(() => cartItems.reduce((sum, product) => sum
+    + (product.priceCents + (preserveItems[product.id] ? product.permanentItemsPriceCents : 0)) * Number(cart[product.id]), 0), [cartItems, cart, preserveItems])
   const paymentInitialization = useMemo(() => ({ amount: total / 100 }), [total])
   const money = cents => (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -376,6 +384,7 @@ function StorePage({ player, onLogin }) {
       if (order.status === 'paid') {
         setPaymentResult(current => ({ ...current, status: 'approved' }))
         setCart({})
+        setPreserveItems({})
         setPendingOrderId('')
         setVerificationMessage('')
       } else if (order.status === 'failed') {
@@ -401,6 +410,9 @@ function StorePage({ player, onLogin }) {
   }, [pendingOrderId, refreshPaymentStatus])
 
   function changeQuantity(id, amount) {
+    if (Number(cart[id] || 0) + amount <= 0) {
+      setPreserveItems(current => { const next = { ...current }; delete next[id]; return next })
+    }
     setCart(current => {
       const next = { ...current }
       const quantity = Math.min(99, Math.max(0, Number(next[id] || 0) + amount))
@@ -429,7 +441,7 @@ function StorePage({ player, onLogin }) {
       const response = await fetch(api('/v1/site/store/payments'), {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]) })),
+          items: cartItems.map(product => ({ id: product.id, quantity: Number(cart[product.id]), preserveItems: Boolean(preserveItems[product.id]) })),
           payment,
         }),
       })
@@ -455,7 +467,7 @@ function StorePage({ player, onLogin }) {
       if (['rejected', 'cancelled'].includes(data.status))
         throw new Error('O pagamento não foi autorizado. Confira os dados ou escolha outro método.')
       setPaymentResult(data)
-      if (data.status === 'approved') setCart({})
+      if (data.status === 'approved') { setCart({}); setPreserveItems({}) }
       else if (data.status === 'pending' || data.status === 'in_process') setPendingOrderId(data.orderId)
       else throw new Error('O Mercado Pago retornou um status de pagamento inesperado.')
       return data
@@ -465,7 +477,7 @@ function StorePage({ player, onLogin }) {
     } finally {
       setCheckoutBusy(false)
     }
-  }, [cartItems, cart])
+  }, [cartItems, cart, preserveItems])
 
   const handlePaymentError = useCallback(() => {
     setError('Não foi possível carregar o formulário de pagamento. Atualize a página e tente novamente.')
@@ -484,19 +496,20 @@ function StorePage({ player, onLogin }) {
         </nav>
         {loading ? <p className="store-status">Carregando produtos…</p> : visibleProducts.length ? <div className="store-products">
           {visibleProducts.map(product => <article className="store-product" key={product.id}>
-            <div className="store-product-art">{product.kind === 'vip' ? <Crown size={24} /> : <Package size={24} />}</div>
+            <div className="store-product-art">{product.productType === 'vip' ? <Crown size={24} /> : product.productType === 'key' ? <KeyRound size={24} /> : <Package size={24} />}</div>
             <span className="store-product-category">{product.category}</span>
             <h2>{product.name}</h2>
             <p>{product.description || 'Um novo benefício para sua jornada.'}</p>
-            {product.kind === 'vip' && <small className="store-product-duration">{product.durationDays ? `${product.durationDays} dias` : 'Permanente'}</small>}
-            <div className="store-product-bottom"><strong>{money(product.priceCents)}</strong><button className="store-add" onClick={() => changeQuantity(product.id, 1)} aria-label={`Adicionar ${product.name} ao carrinho`} title="Adicionar ao carrinho"><Plus size={17} /></button></div>
+            {product.productType === 'vip' && <small className="store-product-duration">{product.durationDays ? `${product.durationDays} dias` : 'Permanente'}</small>}
+            {product.productType === 'vip' && product.permanentItemsPriceCents > 0 && <label className="store-preserve-option"><input type="checkbox" checked={Boolean(preserveItems[product.id])} onChange={event => setPreserveItems(current => ({ ...current, [product.id]: event.target.checked }))} /> Preservar itens permanentemente <strong>+ {money(product.permanentItemsPriceCents)}</strong></label>}
+            <div className="store-product-bottom"><strong>{money(product.priceCents + (preserveItems[product.id] ? product.permanentItemsPriceCents : 0))}</strong><button className="store-add" onClick={() => changeQuantity(product.id, 1)} aria-label={`Adicionar ${product.name} ao carrinho`} title="Adicionar ao carrinho"><Plus size={17} /></button></div>
           </article>)}
         </div> : <div className="store-empty"><ShoppingCart size={25} /><h2>{loading ? 'Carregando…' : 'A loja está sendo preparada.'}</h2><p>{loading ? '' : 'Novos produtos estarão disponíveis em breve.'}</p></div>}
       </div>
       <aside className="store-cart" aria-label="Carrinho">
         <div className="store-cart-heading"><h2><ShoppingCart size={18} /> Carrinho</h2><span>{cartItems.reduce((count, item) => count + Number(cart[item.id]), 0)}</span></div>
         {cartItems.length ? <div className="store-cart-items">{cartItems.map(item => <article className="store-cart-item" key={item.id}>
-          <div className="store-cart-item-title"><strong>{item.name}</strong><small>{money(item.priceCents)} cada</small></div>
+          <div className="store-cart-item-title"><strong>{item.name}</strong><small>{money(item.priceCents + (preserveItems[item.id] ? item.permanentItemsPriceCents : 0))} cada</small>{preserveItems[item.id] && <small>Itens permanentes</small>}</div>
           <div className="store-quantity"><button onClick={() => changeQuantity(item.id, -1)} aria-label={`Diminuir ${item.name}`}><Minus size={13} /></button><span>{cart[item.id]}</span><button onClick={() => changeQuantity(item.id, 1)} aria-label={`Aumentar ${item.name}`}><Plus size={13} /></button><button className="store-remove" onClick={() => setCart(current => { const next = { ...current }; delete next[item.id]; return next })} aria-label={`Remover ${item.name}`}><Trash2 size={14} /></button></div>
         </article>)}</div> : <p className="store-cart-empty">Seu carrinho está vazio.</p>}
         <div className="store-cart-total"><span>Total</span><strong>{money(total)}</strong></div>
@@ -1176,7 +1189,7 @@ function StoreEditor() {
   const [editorMode, setEditorMode] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [categoryForm, setCategoryForm] = useState({ id: null, name: '' })
-  const [productForm, setProductForm] = useState({ name: '', description: '', categoryId: '', price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true })
+  const [productForm, setProductForm] = useState({ name: '', description: '', categoryId: '', price: '', productType: 'vip', vipGroup: '', durationDays: '', productCode: '', deliveryQuantity: '1', permanentItemsPrice: '', active: true })
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -1202,7 +1215,7 @@ function StoreEditor() {
       const messages = {
         invalid_category: 'A categoria precisa ter entre 2 e 40 caracteres.', category_exists: 'Já existe uma categoria com esse nome.',
         category_not_empty: 'Mova os produtos desta categoria antes de removê-la.',
-        invalid_product: 'Revise os campos do produto. VIP exige grupo; produto exige código para o plugin.',
+        invalid_product: 'Revise o tipo, identificador e quantidade do produto.',
       }
       throw new Error(messages[data.error] || 'Não foi possível salvar as alterações.')
     }
@@ -1229,10 +1242,15 @@ function StoreEditor() {
     event.preventDefault()
     setBusy(true); setError(''); setNotice('')
     try {
-      const data = { ...productForm, categoryId: Number(productForm.categoryId), price: productForm.price.trim(), durationDays: productForm.durationDays || null }
+      const data = {
+        ...productForm, kind: productForm.productType === 'vip' ? 'vip' : 'product',
+        categoryId: Number(productForm.categoryId), price: productForm.price.trim(),
+        durationDays: productForm.durationDays || null, deliveryQuantity: Number(productForm.deliveryQuantity || 1),
+        permanentItemsPrice: productForm.permanentItemsPrice.trim() || '0',
+      }
       await send(editingProduct ? `/v1/site/admin/store/products/${editingProduct}` : '/v1/site/admin/store/products', editingProduct ? 'PATCH' : 'POST', data)
       setEditingProduct(null)
-      setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true })
+      setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', productType: 'vip', vipGroup: '', durationDays: '', productCode: '', deliveryQuantity: '1', permanentItemsPrice: '', active: true })
       setNotice(editingProduct ? 'Produto atualizado.' : 'Produto criado.')
       setRevision(value => value + 1)
     } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
@@ -1242,8 +1260,11 @@ function StoreEditor() {
     setEditingProduct(product.id)
     setProductForm({
       name: product.name, description: product.description, categoryId: String(product.categoryId),
-      price: (product.priceCents / 100).toFixed(2), kind: product.kind, vipGroup: product.vipGroup || '',
-      durationDays: product.durationDays || '', productCode: product.productCode || '', active: Boolean(product.active),
+      price: (product.priceCents / 100).toFixed(2), productType: product.productType || (product.kind === 'vip' ? 'vip' : 'other'), vipGroup: product.vipGroup || '',
+      durationDays: product.durationDays || '', productCode: product.productCode || '',
+      deliveryQuantity: String(product.deliveryQuantity || 1),
+      permanentItemsPrice: product.permanentItemsPriceCents ? (product.permanentItemsPriceCents / 100).toFixed(2) : '',
+      active: Boolean(product.active),
     })
   }
 
@@ -1268,15 +1289,22 @@ function StoreEditor() {
             <label>Nome<input required minLength={2} maxLength={80} value={productForm.name} onChange={event => setProductForm(current => ({ ...current, name: event.target.value }))} /></label>
             <label>Categoria<select required disabled={!catalog.categories.length} value={productForm.categoryId} onChange={event => setProductForm(current => ({ ...current, categoryId: event.target.value }))}><option value="">Selecione</option>{catalog.categories.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
             <label>Preço (R$)<input required type="number" min="1" max="1000000" step="0.01" value={productForm.price} onChange={event => setProductForm(current => ({ ...current, price: event.target.value }))} /></label>
-            <label>Tipo<select value={productForm.kind} onChange={event => setProductForm(current => ({ ...current, kind: event.target.value }))}><option value="vip">VIP</option><option value="product">Outro produto</option></select></label>
-            {productForm.kind === 'vip' ? <><label>Grupo LuckPerms<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={productForm.vipGroup} onChange={event => setProductForm(current => ({ ...current, vipGroup: event.target.value }))} /></label><label>Duração em dias<input type="number" min="1" max="3650" placeholder="Vazio = permanente" value={productForm.durationDays} onChange={event => setProductForm(current => ({ ...current, durationDays: event.target.value }))} /></label></> : <label>Código para o plugin<input required maxLength={64} pattern="[A-Za-z0-9._-]+" value={productForm.productCode} onChange={event => setProductForm(current => ({ ...current, productCode: event.target.value }))} /></label>}
+            <label>Tipo<select value={productForm.productType} onChange={event => setProductForm(current => ({ ...current, productType: event.target.value, productCode: '' }))}><option value="vip">VIP</option><option value="key">KEY</option><option value="kit">KIT</option><option value="item">ITEM (kit de um item)</option></select></label>
+            {productForm.productType === 'vip' ? <>
+              <label>ID do VIP NexoriaVIP<input required maxLength={32} pattern="[A-Za-z0-9_-]{2,32}" value={productForm.vipGroup} onChange={event => setProductForm(current => ({ ...current, vipGroup: event.target.value }))} /></label>
+              <label>Duração em dias<input type="number" min="1" max="3650" placeholder="Vazio = permanente" value={productForm.durationDays} onChange={event => setProductForm(current => ({ ...current, durationDays: event.target.value }))} /></label>
+              <label>Adicional para itens permanentes (R$)<input type="number" min="0" max="1000000" step="0.01" value={productForm.permanentItemsPrice} onChange={event => setProductForm(current => ({ ...current, permanentItemsPrice: event.target.value }))} /></label>
+            </> : <>
+              <label>{productForm.productType === 'key' ? 'ID da crate NexoriaVIP' : 'ID do kit NexoriaVIP'}<input required maxLength={productForm.productType === 'key' ? 32 : 24} pattern={productForm.productType === 'key' ? '[A-Za-z0-9_-]{2,32}' : '[A-Za-z0-9_]{2,24}'} value={productForm.productCode} onChange={event => setProductForm(current => ({ ...current, productCode: event.target.value }))} /></label>
+              <label>{productForm.productType === 'key' ? 'Keys por unidade' : productForm.productType === 'item' ? 'Itens (kits de um item) por unidade' : 'Kits por unidade'}<input required type="number" min="1" max={productForm.productType === 'key' ? 64 : 64} value={productForm.deliveryQuantity} onChange={event => setProductForm(current => ({ ...current, deliveryQuantity: event.target.value }))} /></label>
+            </>}
             <label className="store-description-label">Descrição<textarea maxLength={1000} rows={3} value={productForm.description} onChange={event => setProductForm(current => ({ ...current, description: event.target.value }))} /></label>
             <label className="store-active-label"><input type="checkbox" checked={productForm.active} onChange={event => setProductForm(current => ({ ...current, active: event.target.checked }))} /> Produto disponível na loja</label>
-            <div className="store-product-form-actions"><button className="button button-primary" disabled={busy || !catalog.categories.length}>{busy ? 'Salvando…' : editingProduct ? 'Salvar produto' : 'Criar produto'} <Save size={15} /></button>{editingProduct && <button type="button" className="admin-back" onClick={() => { setEditingProduct(null); setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', kind: 'vip', vipGroup: '', durationDays: '', productCode: '', active: true }) }}>Cancelar edição</button>}</div>
+            <div className="store-product-form-actions"><button className="button button-primary" disabled={busy || !catalog.categories.length}>{busy ? 'Salvando…' : editingProduct ? 'Salvar produto' : 'Criar produto'} <Save size={15} /></button>{editingProduct && <button type="button" className="admin-back" onClick={() => { setEditingProduct(null); setProductForm({ name: '', description: '', categoryId: String(catalog.categories[0]?.id || ''), price: '', productType: 'vip', vipGroup: '', durationDays: '', productCode: '', deliveryQuantity: '1', permanentItemsPrice: '', active: true }) }}>Cancelar edição</button>}</div>
           </form>
         </section>
       </>}
-      <section className="store-admin-section"><h2>Produtos cadastrados</h2><div className="store-admin-products">{catalog.products.map(item => <article className={!item.active ? 'disabled' : ''} key={item.id}><div><strong>{item.name}</strong><small>{item.category} · {item.kind === 'vip' ? `VIP · ${item.vipGroup}` : `Produto · ${item.productCode}`} · {(item.priceCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</small></div><span>{item.active ? 'Ativo' : 'Desativado'}</span>{editorMode && <div><button className="refresh-button" onClick={() => editProduct(item)} aria-label={`Editar ${item.name}`} title="Editar produto"><Pencil size={14} /></button>{item.active && <button className="admin-dismiss" onClick={() => disableProduct(item)} aria-label={`Desativar ${item.name}`} title="Desativar produto"><Trash2 size={15} /></button>}</div>}</article>)}{catalog.products.length === 0 && <p className="admin-empty">Nenhum produto cadastrado.</p>}</div></section>
+      <section className="store-admin-section"><h2>Produtos cadastrados</h2><div className="store-admin-products">{catalog.products.map(item => <article className={!item.active ? 'disabled' : ''} key={item.id}><div><strong>{item.name}</strong><small>{item.category} · {String(item.productType || item.kind).toUpperCase()} · {item.productCode || item.vipGroup || ''} · {(item.priceCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{item.permanentItemsPriceCents > 0 ? ` · + ${ (item.permanentItemsPriceCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} permanência` : ''}</small></div><span>{item.active ? 'Ativo' : 'Desativado'}</span>{editorMode && <div><button className="refresh-button" onClick={() => editProduct(item)} aria-label={`Editar ${item.name}`} title="Editar produto"><Pencil size={14} /></button>{item.active && <button className="admin-dismiss" onClick={() => disableProduct(item)} aria-label={`Desativar ${item.name}`} title="Desativar produto"><Trash2 size={15} /></button>}</div>}</article>)}{catalog.products.length === 0 && <p className="admin-empty">Nenhum produto cadastrado.</p>}</div></section>
     </>}
   </div>
 }
